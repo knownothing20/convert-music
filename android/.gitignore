@@ -1,0 +1,12 @@
+# 构建产物
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+
+# 由 CI 在构建前从仓库根目录复制进来，不纳入版本控制
+app/src/main/assets/index.html
+app/src/main/assets/manifest.json
+app/src/main/assets/img/

@@ -1010,7 +1010,56 @@ const Zip = (() => {
     render();
   }
 
+  /* ---- 下载：网页用 a[download]，APK 里走原生桥接（WebView 不支持 blob 下载）---- */
+  const NATIVE = typeof window.AndroidBridge !== "undefined" && window.AndroidBridge !== null;
+
+  function bytesToBase64(bytes) {
+    let binary = "";
+    const step = 0x8000;
+    for (let i = 0; i < bytes.length; i += step) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + step));
+    }
+    return btoa(binary);
+  }
+
+  async function saveViaNative(blob, name) {
+    const CHUNK = 3 * 1024 * 1024;   // 分块传输，避免大文件在 JS 与原生之间构造巨型字符串
+    const total = blob.size;
+    let sent = 0;
+
+    if (!window.AndroidBridge.beginFile(name)) {
+      throw new Error("无法创建目标文件");
+    }
+
+    while (sent < total) {
+      const end = Math.min(sent + CHUNK, total);
+      const buf = await blob.slice(sent, end).arrayBuffer();
+      const ok = window.AndroidBridge.appendChunk(bytesToBase64(new Uint8Array(buf)));
+      if (!ok) throw new Error("写入失败，请检查存储空间");
+      sent = end;
+      dockSub.textContent = `正在保存 ${Math.round((sent / total) * 100)}%`;
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    const msg = window.AndroidBridge.endFile();
+    if (msg && msg.indexOf("ERR") === 0) throw new Error(msg.slice(3));
+  }
+
   function download(blob, name) {
+    if (NATIVE) {
+      dockTitle.textContent = "正在保存到本机";
+      saveViaNative(blob, name)
+        .then(() => {
+          dockTitle.textContent = "已保存";
+          dockSub.textContent = "文件在「音乐/音乐转换」文件夹";
+        })
+        .catch((e) => {
+          dockTitle.textContent = "保存失败";
+          dockSub.textContent = e.message || String(e);
+        });
+      return;
+    }
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = name;
@@ -1018,6 +1067,14 @@ const Zip = (() => {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  /* ---- 原生环境适配：WebView 不支持目录选择，隐藏入口并调整文案 ---- */
+  if (NATIVE) {
+    const pd = $("pickDir");
+    if (pd) pd.style.display = "none";
+    const hint = document.querySelector(".drop-hint");
+    if (hint) hint.textContent = "支持一次选择多个文件";
   }
 
   /* ---- 事件 ---- */
