@@ -25,6 +25,20 @@ python -m http.server 8080
 
 然后浏览器访问 <http://localhost:8080>。
 
+## 直接安装 Android 版（APK）
+
+每次推送到 `main`，GitHub Actions 会自动构建 APK 并发布到 Release，固定下载地址：
+
+```
+https://github.com/knownothing20/convert-music/releases/latest/download/convert-music.apk
+```
+
+- `android/` 是一个 WebView 壳工程，与网页共用同一份 `index.html`（构建时自动复制进 assets）
+- debug 签名，安装时需要允许「未知来源」
+- 最低系统 Android 10（API 29）
+- 转换结果保存在「音乐 / 音乐转换」文件夹，走 MediaStore，不需要存储权限
+- WebView 不支持 `blob:` 下载，因此页面会在检测到原生桥接时改用分块传输写盘
+
 ## 部署到 GitHub Pages
 
 1. 进入仓库 **Settings → Pages**

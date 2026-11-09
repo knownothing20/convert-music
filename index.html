@@ -1075,6 +1075,13 @@ const Zip = (() => {
     if (pd) pd.style.display = "none";
     const hint = document.querySelector(".drop-hint");
     if (hint) hint.textContent = "支持一次选择多个文件";
+    // APK 内没有 classic 目录，把外链降级为纯文本，避免点了没反应
+    document.querySelectorAll('a[href="classic/"]').forEach((a) => {
+      const span = document.createElement("span");
+      span.textContent = a.textContent;
+      span.style.color = "var(--text-3)";
+      a.replaceWith(span);
+    });
   }
 
   /* ---- 事件 ---- */
