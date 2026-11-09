@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang=zh-CN>
+
+<head>
+    <meta charset=utf-8>
+    <script>
+        /* 阻断原项目内置的第三方统计上报(stats.ixarea.com),避免访客数据发往第三方服务器。
+           在业务代码加载前安装拦截器,不改动已压缩的 app.js,避免破坏其逻辑。 */
+        (function () {
+            var BLOCKED = /stats\.ixarea\.com/i;
+            var hit = function (u) {
+                try { return BLOCKED.test(typeof u === "string" ? u : (u && u.url) || ""); }
+                catch (e) { return false; }
+            };
+            if (window.fetch) {
+                var of = window.fetch;
+                window.fetch = function (input) {
+                    if (hit(input)) return Promise.resolve(new Response("", { status: 204 }));
+                    return of.apply(this, arguments);
+                };
+            }
+            var XHR = window.XMLHttpRequest;
+            if (XHR && XHR.prototype) {
+                var oo = XHR.prototype.open;
+                XHR.prototype.open = function (m, u) {
+                    if (hit(u)) { this.__umBlocked = true; return; }
+                    return oo.apply(this, arguments);
+                };
+                var os = XHR.prototype.send;
+                XHR.prototype.send = function () {
+                    if (this.__umBlocked) return;
+                    return os.apply(this, arguments);
+                };
+            }
+            if (navigator.sendBeacon) {
+                var ob = navigator.sendBeacon.bind(navigator);
+                navigator.sendBeacon = function (u, d) {
+                    if (hit(u)) return true;
+                    return ob(u, d);
+                };
+            }
+        })();
+    </script>
+    <meta content="IE=edge" http-equiv=X-UA-Compatible>
+    <meta content="width=device-width,initial-scale=1" name=viewport>
+    <title>音乐转换</title>
+    <meta content=音乐转换,解锁,转换,ncm,qmc,qmc0,qmc3,qmcflac,qmc,ogg,mflac,qq音乐,网易云音乐,加密 name=keywords>
+    <meta content="音乐转换 - 在浏览器本地还原已购的加密音乐文件，文件不会上传服务器。" name=description>
+    <style>
+        #loader {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            z-index: 1010;
+            margin: -75px 0 0 -75px;
+            border: 16px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 16px solid #3498db;
+            width: 120px;
+            height: 120px;
+            animation: spin 2s linear infinite
+        }
+        
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg)
+            }
+            100% {
+                transform: rotate(360deg)
+            }
+        }
+    </style>
+    <link href=css/app.efaf15ea.css rel=preload as=style>
+    <link href=css/chunk-vendors.a870fc53.css rel=preload as=style>
+    <link href=js/app.7646e312.js rel=preload as=script>
+    <link href=js/chunk-vendors.e2253095.js rel=preload as=script>
+    <link href=css/chunk-vendors.a870fc53.css rel=stylesheet>
+    <link href=css/app.efaf15ea.css rel=stylesheet>
+    <link rel=icon type=image/png sizes=32x32 href=img/icons/favicon-32x32.png>
+    <link rel=icon type=image/png sizes=16x16 href=img/icons/favicon-16x16.png>
+    <link rel=manifest href=manifest.json>
+    <meta name=theme-color content=#4DBA87>
+    <meta name=apple-mobile-web-app-capable content=no>
+    <meta name=apple-mobile-web-app-status-bar-style content=default>
+    <meta name=apple-mobile-web-app-title content=convert-music>
+    <link rel=apple-touch-icon href=img/icons/apple-touch-icon-152x152.png>
+    <link rel=mask-icon href=img/icons/safari-pinned-tab.svg color=#4DBA87>
+    <meta name=msapplication-TileImage content=img/icons/msapplication-icon-144x144.png>
+    <meta name=msapplication-TileColor content=#000000>
+</head>
+
+<body>
+    <div id=app></div>
+    <script src=js/chunk-vendors.e2253095.js></script>
+    <script src=js/app.7646e312.js></script>
+</body>
+
+</html>
