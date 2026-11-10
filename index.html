@@ -229,6 +229,29 @@
     margin-top: 14px;
     display: flex; gap: 9px; flex-wrap: wrap; justify-content: center;
   }
+  /* 卡片内两个按钮统一为实心质感，只靠颜色区分主次，避免一实一透显得割裂 */
+  .drop-cta .btn {
+    min-width: 118px;
+    background: rgba(168, 85, 247, .20);
+    border: 1px solid rgba(192, 132, 252, .32);
+    border-top-color: rgba(216, 180, 254, .40);
+    color: #f3e9ff;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 6px 16px -12px rgba(0, 0, 0, .8);
+  }
+  .drop-cta .btn:hover {
+    background: rgba(168, 85, 247, .30);
+    border-color: rgba(192, 132, 252, .48);
+  }
+  .drop-cta .btn.primary {
+    background: var(--grad);
+    border-color: rgba(255, 255, 255, .30);
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(60, 20, 90, .38);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .55),
+      inset 0 -8px 14px -10px rgba(88, 28, 135, .85),
+      0 14px 30px -14px rgba(168, 85, 247, .9);
+  }
 
   /* ============================================================
      按钮
