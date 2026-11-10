@@ -91,7 +91,9 @@ class MainActivity : Activity() {
 
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
-            .addPathHandler("/scan/", WebViewAssetLoader.InternalStoragePathHandler(this, dirs.scanDir))
+            // 不能用 InternalStoragePathHandler：它按扩展名推断 MIME，.ncm/.kgm 这些
+            // 不在系统类型表里会返回 null，导致网页 fetch 拿到 404。这里统一按二进制流返回。
+            .addPathHandler("/scan/", RawFileHandler(dirs.scanDir))
             .build()
 
         webView.webViewClient = object : WebViewClientCompat() {
@@ -429,6 +431,30 @@ class MainActivity : Activity() {
                     )
                 }
             }.start()
+        }
+    }
+}
+
+/** 直接把目录下的文件当作二进制流返回，不依赖扩展名推断 MIME */
+class RawFileHandler(private val baseDir: java.io.File) : WebViewAssetLoader.PathHandler {
+    override fun handle(path: String): WebResourceResponse? {
+        return try {
+            val rel = path.removePrefix("/scan/").trimStart('/')
+            if (rel.isEmpty()) return null
+            val f = java.io.File(baseDir, rel)
+            if (!f.isFile) return null
+            // 防目录穿越
+            if (!f.canonicalPath.startsWith(baseDir.canonicalPath)) return null
+            WebResourceResponse(
+                "application/octet-stream",
+                null,
+                200,
+                "OK",
+                mapOf("Cache-Control" to "no-store"),
+                java.io.FileInputStream(f)
+            )
+        } catch (e: Exception) {
+            null
         }
     }
 }

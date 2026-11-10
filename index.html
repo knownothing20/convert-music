@@ -3782,7 +3782,11 @@ const Zip = (() => {
                 name: x.name,
                 size: x.size,
                 srcDir: x.dir || "",
-                load: () => fetch(x.url).then((r) => r.arrayBuffer()),
+                load: () => fetch(x.url).then((r) => {
+                  // 以前这里不检查状态码，404 也会当成文件内容，最后只报「文件太小」
+                  if (!r.ok) throw new Error("读取失败（HTTP " + r.status + "）：" + x.name);
+                  return r.arrayBuffer();
+                }),
               })));
             });
             AndroidBridge.dirsScan(id, cb);
