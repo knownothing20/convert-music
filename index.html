@@ -3951,7 +3951,11 @@ const Zip = (() => {
   }
 
   const scanBtnEl = $("scanBtn");
-  if (scanBtnEl) scanBtnEl.addEventListener("click", scanDirs);
+  if (scanBtnEl) scanBtnEl.addEventListener("click", (e) => {
+    // 不加这句，点击会冒泡到卡片，连带弹出文件选择器
+    e.stopPropagation();
+    scanDirs();
+  });
 
   async function refreshDirs() {
     const box = $("dirsBox");
@@ -4046,7 +4050,11 @@ const Zip = (() => {
 
   /* ---- 事件 ---- */
   $("pickFiles").addEventListener("click", (e) => { e.stopPropagation(); fileInput.click(); });
-  drop.addEventListener("click", () => fileInput.click());
+  drop.addEventListener("click", (e) => {
+    // 点按钮时不触发，避免一次点击弹出两个选择器
+    if (e.target.closest("button")) return;
+    fileInput.click();
+  });
   fileInput.addEventListener("change", () => { addFiles(Array.from(fileInput.files || [])); fileInput.value = ""; });
   dirInput.addEventListener("change", () => { addFiles(Array.from(dirInput.files || [])); dirInput.value = ""; });
 
