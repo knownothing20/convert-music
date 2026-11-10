@@ -629,39 +629,7 @@
   }
   .switch:checked::after { transform: translateX(17px); }
 
-  /* 首页的常用目录快捷入口 */
-  .quick-dirs {
-    margin-top: 16px;
-    width: 100%;
-    max-width: 320px;
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-  }
-  .quick-dir {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 11px 14px;
-    border-radius: 12px;
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, .055);
-    color: var(--text-2);
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-    transition: .16s ease;
-    text-align: left;
-  }
-  .quick-dir:hover:not(:disabled) {
-    border-color: var(--line-strong);
-    color: var(--text);
-    background: rgba(255, 255, 255, .1);
-  }
-  .quick-dir:disabled { opacity: .6; cursor: default; }
-  .quick-dir .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .quick-dir .a { flex: none; font-size: 12px; color: var(--primary); opacity: .9; }
+  /* 首页的常用目录快捷入口已合并到「扫描目录」按钮，样式保留备用 */
 
   /* ============================================================
      常用目录（桌面 Chrome / Edge 才具备 FSA 能力）
@@ -815,9 +783,8 @@
     <div class="drop-hint" id="dropHint">支持批量；桌面端可直接拖文件夹</div>
     <div class="drop-cta" id="dropCta">
       <button class="btn primary" id="pickFiles" type="button">选择文件</button>
-      <button class="btn" id="pickDir" type="button">选择文件夹</button>
+      <button class="btn" id="scanBtn" type="button">扫描目录</button>
     </div>
-    <div class="quick-dirs hidden" id="quickDirs"></div>
   </div>
 
   <input type="file" id="fileInput" accept=".ncm,.kwm,.kgm,.kgma,.mg3d,.xm,.x2m,.x3m,.qmc0,.qmc2,.qmc3,.qmc4,.qmc6,.qmc8,.qmcflac,.qmcogg,.mflac,.mflac0,.mgg,.mgg0,.mgg1,.mggl,.tkm" multiple hidden />
@@ -3725,7 +3692,16 @@ const Zip = (() => {
     const fn = scanWaiters.get(cid);
     if (fn) { scanWaiters.delete(cid); fn(json); }
   };
-  window.__onDirsChanged = () => { refreshDirs(); };
+  window.__onDirsChanged = async () => {
+    await refreshDirs();
+    if (!scanAfterAdd) return;
+    scanAfterAdd = false;
+    const btn = $("scanBtn");
+    if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
+    let entries = [];
+    try { entries = await DirAPI.list(); } catch (e) { entries = []; }
+    if (entries.length) await doScan(entries);
+  };
   window.__onDirError = (msg) => {
     dockTitle.textContent = "添加目录失败";
     dockSub.textContent = msg;
@@ -3840,99 +3816,91 @@ const Zip = (() => {
 
   let dirEntries = [];
 
-  /* ---- 首页入口：按环境自适应 ---- */
+  /* ---- 首页入口：选择文件 / 扫描目录 ---- */
   const IS_TOUCH = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
-
-  function canPickDir() {
-    return !!(NATIVE || window.showDirectoryPicker);
-  }
+  let scanAfterAdd = false;   // 用户是为了扫描才去选目录的，选完自动继续
 
   function applyDropEnv() {
     const title = $("dropTitle");
     const hint = $("dropHint");
-    const dirBtn = $("pickDir");
+    const scanBtn = $("scanBtn");
     const hasDirs = !!(dirEntries && dirEntries.length);
 
-    if (hasDirs) {
-      title.textContent = "从常用目录扫描";
-      hint.textContent = "点一下读取整个文件夹，也可以手动选择";
-    } else if (NATIVE || IS_TOUCH) {
+    if (NATIVE || IS_TOUCH) {
       title.textContent = "选择音乐文件";
-      hint.textContent = "支持一次选择多个";
+      hint.textContent = hasDirs ? "也可以点「扫描目录」读取整个文件夹" : "支持一次选择多个";
     } else {
       title.textContent = "拖入文件，或点这里选择";
       hint.textContent = "支持批量；也可以直接拖文件夹";
     }
 
-    // 手机上没有「选择文件夹」这个概念，改用常用目录
-    if (dirBtn && (NATIVE || IS_TOUCH)) dirBtn.classList.add("hidden");
+    // 没有目录能力（如手机浏览器）就隐藏「扫描目录」
+    if (scanBtn) scanBtn.classList.toggle("hidden", !DirAPI);
   }
 
-  function renderQuickDirs() {
-    const box = $("quickDirs");
-    if (!box) return;
+  async function doScan(entries) {
+    const btn = $("scanBtn");
+    if (btn) { btn.disabled = true; btn.textContent = "扫描中…"; }
 
-    const list = dirEntries || [];
+    let all = [];
+    let failed = 0;
+    for (const e of entries) {
+      try {
+        const files = await DirAPI.scan(e.id);
+        all = all.concat(files);
+      } catch (err) {
+        failed++;
+      }
+    }
 
-    if (!list.length) {
-      if (!canPickDir()) {
-        box.classList.add("hidden");
-        box.innerHTML = "";
+    if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
+
+    if (!all.length) {
+      dockTitle.textContent = failed ? "扫描失败" : "没有找到可转换文件";
+      dockSub.textContent = failed
+        ? "目录可能已失效，去设置里重新添加"
+        : "检查目录里有没有 ncm / qmc / kgm 等文件";
+      return;
+    }
+    addFiles(all);
+  }
+
+  async function scanDirs() {
+    if (!DirAPI) return;
+    const btn = $("scanBtn");
+
+    let entries = [];
+    try { entries = await DirAPI.list(); } catch (e) { entries = []; }
+
+    // 还没配过目录：先让用户选一个，选完自动扫描
+    if (!entries.length) {
+      if (btn) { btn.disabled = true; btn.textContent = "选择目录…"; }
+      scanAfterAdd = true;
+      try {
+        await DirAPI.add();
+      } catch (e) {
+        scanAfterAdd = false;
+        if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
         return;
       }
-      box.classList.remove("hidden");
-      box.innerHTML =
-        '<button class="quick-dir" id="quickAddDir" type="button">' +
-        '<span class="n">添加音乐目录</span><span class="a">+</span></button>';
-      const b = $("quickAddDir");
-      if (b) {
-        b.addEventListener("click", async () => {
-          b.disabled = true;
-          try {
-            await DirAPI.add();
-            await refreshDirs();
-          } catch (e) {
-            b.disabled = false;
-          }
-        });
+
+      // 桌面端 add 会等用户选完才返回；APK 走系统回调，由 __onDirsChanged 接手
+      if (DirAPI.kind === "fsa") {
+        scanAfterAdd = false;
+        if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
+        await refreshDirs();
+        let after = [];
+        try { after = await DirAPI.list(); } catch (e) { after = []; }
+        if (after.length) await doScan(after);
       }
       return;
     }
 
-    box.classList.remove("hidden");
-    box.innerHTML = list.map((_, i) =>
-      '<button class="quick-dir" data-qscan="' + i + '" type="button">' +
-      '<span class="n"></span><span class="a">扫描 →</span></button>'
-    ).join("");
-
-    box.querySelectorAll("[data-qscan]").forEach((b) => {
-      const i = +b.dataset.qscan;
-      b.querySelector(".n").textContent = list[i].name; // 用 textContent，避免目录名注入
-      const label = b.querySelector(".a");
-
-      b.addEventListener("click", async () => {
-        const entry = list[i];
-        if (!entry) return;
-        b.disabled = true;
-        label.textContent = "扫描中";
-        try {
-          const files = await DirAPI.scan(entry.id);
-          b.disabled = false;
-          if (!files.length) {
-            label.textContent = "没有可转换文件";
-            setTimeout(() => { label.textContent = "扫描 →"; }, 1800);
-          } else {
-            label.textContent = "扫描 →";
-            addFiles(files);
-          }
-        } catch (e) {
-          b.disabled = false;
-          label.textContent = "失败";
-          setTimeout(() => { label.textContent = "扫描 →"; }, 1800);
-        }
-      });
-    });
+    await doScan(entries);
   }
+
+  const scanBtnEl = $("scanBtn");
+  if (scanBtnEl) scanBtnEl.addEventListener("click", scanDirs);
 
   async function refreshDirs() {
     const box = $("dirsBox");
@@ -3949,7 +3917,6 @@ const Zip = (() => {
       dirEntries = [];
     }
     renderDirs();
-    renderQuickDirs();
     applyDropEnv();
   }
 
@@ -4024,17 +3991,8 @@ const Zip = (() => {
     $("dirsBox").classList.add("hidden");
   }
 
-  /* ---- 原生环境适配：WebView 不支持目录选择，隐藏入口并调整文案 ---- */
-  if (NATIVE) {
-    const pd = $("pickDir");
-    if (pd) pd.style.display = "none";
-    const hint = document.querySelector(".drop-hint");
-    if (hint) hint.textContent = "支持一次选择多个文件";
-  }
-
   /* ---- 事件 ---- */
   $("pickFiles").addEventListener("click", (e) => { e.stopPropagation(); fileInput.click(); });
-  $("pickDir").addEventListener("click", (e) => { e.stopPropagation(); dirInput.click(); });
   drop.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => { addFiles(Array.from(fileInput.files || [])); fileInput.value = ""; });
   dirInput.addEventListener("change", () => { addFiles(Array.from(dirInput.files || [])); dirInput.value = ""; });
