@@ -30,3 +30,10 @@ android {
         jvmTarget = "17"
     }
 }
+
+dependencies {
+    // WebViewAssetLoader：把私有目录映射成虚拟 https 路径，让网页能 fetch 本地文件
+    implementation("androidx.webkit:webkit:1.8.0")
+    // DocumentFile：遍历用户选择的目录
+    implementation("androidx.documentfile:documentfile:1.0.1")
+}

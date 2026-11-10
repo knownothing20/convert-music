@@ -7,32 +7,49 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
 import android.view.KeyEvent
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.documentfile.provider.DocumentFile
+import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewClientCompat
+import org.json.JSONObject
 import java.io.OutputStream
 
 /**
  * 单 Activity + WebView 壳。
- * 网页本体放在 assets/index.html，与 GitHub Pages 部署的是同一个文件。
+ *
+ * 网页从 https://appassets.androidplatform.net/assets/index.html 加载（而非 file://），
+ * 这样 /scan/ 下由原生复制出来的临时文件可以被网页同源 fetch 读取，
+ * 避开 file:// 的跨源限制和 content:// 无法 fetch 的问题。
  */
 class MainActivity : Activity() {
 
     private lateinit var webView: WebView
+    private lateinit var dirs: DirManager
     private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private val ui = Handler(Looper.getMainLooper())
 
     private companion object {
         const val FILE_REQ = 1001
+        const val DIR_REQ = 1002
+        const val HOST = "https://appassets.androidplatform.net"
     }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        dirs = DirManager(this)
 
         webView = WebView(this)
         setContentView(webView)
@@ -46,8 +63,19 @@ class MainActivity : Activity() {
             mediaPlaybackRequiresUserGesture = false
         }
 
-        // 网页里的「另存为」走这条通道，因为 WebView 不支持 blob: 下载
-        webView.addJavascriptInterface(FileBridge(this), "AndroidBridge")
+        val loader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/scan/", WebViewAssetLoader.InternalStoragePathHandler(this, dirs.scanDir))
+            .build()
+
+        webView.webViewClient = object : WebViewClientCompat() {
+            override fun shouldInterceptRequest(
+                view: WebView,
+                request: WebResourceRequest
+            ): WebResourceResponse? = loader.shouldInterceptRequest(request.url)
+        }
+
+        webView.addJavascriptInterface(Bridge(), "AndroidBridge")
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
@@ -68,7 +96,7 @@ class MainActivity : Activity() {
             }
         }
 
-        webView.loadUrl("file:///android_asset/index.html")
+        webView.loadUrl("$HOST/assets/index.html")
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -85,6 +113,31 @@ class MainActivity : Activity() {
             }
             return
         }
+
+        if (requestCode == DIR_REQ) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                } catch (e: Exception) { /* 某些 provider 不支持持久化 */ }
+
+                val name = try {
+                    DocumentFile.fromTreeUri(this, uri)?.name
+                } catch (e: Exception) {
+                    null
+                } ?: "目录"
+
+                dirs.add(uri, name)
+                webView.evaluateJavascript(
+                    "window.__onDirsChanged && window.__onDirsChanged()", null
+                )
+            }
+            return
+        }
+
         super.onActivityResult(requestCode, resultCode, data)
     }
 
@@ -96,12 +149,9 @@ class MainActivity : Activity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    /**
-     * 给网页用的文件写入桥。
-     * 分块传输，避免把上百 MB 的文件一次性塞成一个巨大的 base64 字符串。
-     */
-    inner class FileBridge(private val activity: Activity) {
+    inner class Bridge {
 
+        // ---------------- 文件写入（转换结果） ----------------
         private var stream: OutputStream? = null
         private var pendingUri: Uri? = null
 
@@ -116,7 +166,7 @@ class MainActivity : Activity() {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/音乐转换")
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
-                val resolver = activity.contentResolver
+                val resolver = contentResolver
                 val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
                     ?: return false
                 pendingUri = uri
@@ -158,7 +208,7 @@ class MainActivity : Activity() {
                     val done = ContentValues().apply {
                         put(MediaStore.MediaColumns.IS_PENDING, 0)
                     }
-                    activity.contentResolver.update(uri, done, null, null)
+                    contentResolver.update(uri, done, null, null)
                     pendingUri = null
                 }
                 "OK"
@@ -174,7 +224,7 @@ class MainActivity : Activity() {
             val uri = pendingUri
             pendingUri = null
             if (uri != null) {
-                try { activity.contentResolver.delete(uri, null, null) } catch (_: Exception) { }
+                try { contentResolver.delete(uri, null, null) } catch (_: Exception) { }
             }
         }
 
@@ -196,6 +246,51 @@ class MainActivity : Activity() {
                 "ape" -> "audio/x-ape"
                 else -> "audio/mpeg"
             }
+        }
+
+        // ---------------- 常用目录 ----------------
+
+        @JavascriptInterface
+        fun dirsList(): String = dirs.list()
+
+        @JavascriptInterface
+        fun dirsRemove(id: String): Boolean = dirs.remove(id)
+
+        @JavascriptInterface
+        fun dirsAdd() {
+            ui.post {
+                try {
+                    val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                        addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                        )
+                    }
+                    startActivityForResult(i, DIR_REQ)
+                } catch (e: Exception) {
+                    webView.evaluateJavascript(
+                        "window.__onDirError && window.__onDirError('无法打开目录选择器')", null
+                    )
+                }
+            }
+        }
+
+        /** 扫描可能耗时，放到后台线程，完成后把 JSON 丢回网页 */
+        @JavascriptInterface
+        fun dirsScan(id: String, cbId: String) {
+            Thread {
+                val json = try {
+                    dirs.scan(id)
+                } catch (e: Exception) {
+                    "[]"
+                }
+                ui.post {
+                    val quoted = JSONObject.quote(json)
+                    webView.evaluateJavascript(
+                        "window.__onScan && window.__onScan('$cbId', $quoted)", null
+                    )
+                }
+            }.start()
         }
     }
 }
