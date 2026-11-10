@@ -495,6 +495,26 @@
 <script>
 "use strict";
 
+/* ------------------------------------------------------------
+   清理历史遗留的 Service Worker 与缓存。
+   旧版页面注册过 SW 并 precache 了整个页面，会导致浏览器一直
+   返回缓存的旧界面、看不到新版本。这里主动注销并清空缓存。
+   ------------------------------------------------------------ */
+(function cleanupLegacyServiceWorker() {
+  try {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then(function (regs) { regs.forEach(function (r) { r.unregister(); }); })
+        .catch(function () {});
+    }
+    if (window.caches && caches.keys) {
+      caches.keys()
+        .then(function (keys) { keys.forEach(function (k) { caches.delete(k); }); })
+        .catch(function () {});
+    }
+  } catch (e) { /* 忽略：清理失败不应影响主流程 */ }
+})();
+
 /* ============================================================
    1. AES-128 ECB 解密（纯 JS 实现，浏览器原生 WebCrypto 不支持 ECB）
    ============================================================ */

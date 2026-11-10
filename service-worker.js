@@ -1,34 +1,32 @@
 /**
- * Welcome to your Workbox-powered service worker!
+ * 自毁型 Service Worker（由原版 Workbox precache 替换而来）
  *
- * You'll need to register this file in your web app and you should
- * disable HTTP caching for this file too.
- * See https://goo.gl/nhQhGp
- *
- * The rest of the code is auto-generated. Please don't update this file
- * directly; instead, make changes to your Workbox build configuration
- * and re-run your build process.
- * See https://goo.gl/2aRDsh
+ * 原版用 workbox.precaching 把整个页面缓存下来，导致浏览器始终返回旧界面、
+ * 无法更新到新版本。这里改为：安装即接管，激活后清空所有缓存并注销自身。
+ * 浏览器下次检查更新时会走到这里，从而自动把旧缓存清掉。
  */
 
-importScripts("https://storage.googleapis.com/workbox-cdn/releases/4.3.1/workbox-sw.js");
-
-importScripts(
-  "precache-manifest.20dc3e99613cc2639ea2889020209f36.js"
-);
-
-workbox.core.setCacheNameDetails({prefix: "unlock-music"});
-
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+self.addEventListener("install", function () {
+  // 立即激活，不等旧页面关闭
+  self.skipWaiting();
 });
 
-/**
- * The workboxSW.precacheAndRoute() method efficiently caches and responds to
- * requests for URLs in the manifest.
- * See https://goo.gl/S9QRab
- */
-self.__precacheManifest = [].concat(self.__precacheManifest || []);
-workbox.precaching.precacheAndRoute(self.__precacheManifest, {});
+self.addEventListener("activate", function (event) {
+  event.waitUntil(
+    (async function () {
+      try {
+        var keys = await caches.keys();
+        await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+      } catch (e) { /* 忽略 */ }
+
+      try { await self.clients.claim(); } catch (e) { /* 忽略 */ }
+
+      // 注销自己，之后页面完全走网络
+      try { await self.registration.unregister(); } catch (e) { /* 忽略 */ }
+    })()
+  );
+});
+
+self.addEventListener("fetch", function () {
+  // 不做任何拦截，全部走网络
+});
