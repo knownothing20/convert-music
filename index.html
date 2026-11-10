@@ -1131,7 +1131,7 @@ const NCM = (() => {
       if (p < 0 || p + 4 > u8.length) return null;
       const t = new Uint8Array(4);
       for (let i = 0; i < 4; i++) t[i] = u8[p + i] ^ ks[i];
-      return sniff(t);
+      return sniffAudio(t);
     };
 
     let start = -1;
@@ -1205,7 +1205,8 @@ const KWM = (() => {
     const audio = u8.slice(0x400);
     for (let i = 0; i < audio.length; i++) audio[i] ^= mask[i & 0x1f];
 
-    const format = sniffAudio(audio.subarray(0, 4)) || "mp3";
+    const format = sniffAudio(audio.subarray(0, 4));
+    if (!format) throw new Error("kwm 解密失败：结果不是有效音频（文件可能已损坏）");
     return { format, data: audio, meta: null, cover: null };
   }
 
@@ -1528,7 +1529,9 @@ const QMC = (() => {
     const audio = file.slice(0, audioSize);
     cipher.decrypt(audio);
 
-    const format = sniffAudio(audio.subarray(0, 4)) || "mp3";
+    // 必须是真正的音频头，否则说明密钥不对或文件损坏
+    const format = sniffAudio(audio.subarray(0, 4));
+    if (!format) throw new Error("QMC 解密失败：结果不是有效音频（密钥错误或文件已损坏）");
     return { format, data: audio, meta: null, cover: null };
   }
 
@@ -1799,9 +1802,17 @@ const XIMALAYA = (() => {
 
   function decode(arrayBuffer, ext) {
     const u8 = new Uint8Array(arrayBuffer);
-    if (ext === "x2m") return { format: "m4a", data: process(u8, X2M_TABLE, KEY2), meta: null, cover: null };
-    if (ext === "x3m") return { format: "m4a", data: process(u8, X3M_TABLE, KEY3), meta: null, cover: null };
-    throw new Error("不支持的喜马拉雅格式");
+    if (u8.length < SIZE) throw new Error("文件太小，不是有效的喜马拉雅文件");
+
+    let out;
+    if (ext === "x2m") out = process(u8, X2M_TABLE, KEY2);
+    else if (ext === "x3m") out = process(u8, X3M_TABLE, KEY3);
+    else throw new Error("不支持的喜马拉雅格式");
+
+    // 头部还原后应当是 m4a / mp3 / flac 之类的有效音频
+    const format = sniffAudio(out.subarray(0, 4));
+    if (!format) throw new Error("解密失败：结果不是有效音频（文件可能已损坏）");
+    return { format, data: out, meta: null, cover: null };
   }
 
   return { decode };
