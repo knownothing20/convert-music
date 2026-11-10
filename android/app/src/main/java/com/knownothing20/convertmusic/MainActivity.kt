@@ -236,6 +236,9 @@ class MainActivity : Activity() {
         // ---------------- 文件写入（转换结果） ----------------
         private var stream: OutputStream? = null
         private var pendingUri: Uri? = null
+        // 标记本次写入走的是 MediaStore 还是 SAF（存回源目录）。
+        // 两条路的收尾不同：MediaStore 要清 IS_PENDING，SAF 不需要也不支持。
+        private var pendingFromMediaStore = false
 
         @JavascriptInterface
         fun beginFile(fileName: String): Boolean {
@@ -252,6 +255,7 @@ class MainActivity : Activity() {
                 val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
                     ?: return false
                 pendingUri = uri
+                pendingFromMediaStore = true
 
                 val os = resolver.openOutputStream(uri)
                 if (os == null) {
@@ -283,6 +287,7 @@ class MainActivity : Activity() {
                     safe
                 ) ?: return false
                 pendingUri = uri
+                pendingFromMediaStore = false
 
                 val os = contentResolver.openOutputStream(uri)
                 if (os == null) {
@@ -355,13 +360,16 @@ class MainActivity : Activity() {
                 stream = null
 
                 val uri = pendingUri
-                if (uri != null) {
+                // 只有 MediaStore 路径需要清 IS_PENDING。
+                // SAF 的 document URI 不支持这种 update，对它执行会抛
+                // "Update not supported"，导致已写完的文件被误报为保存失败。
+                if (uri != null && pendingFromMediaStore) {
                     val done = ContentValues().apply {
                         put(MediaStore.MediaColumns.IS_PENDING, 0)
                     }
                     contentResolver.update(uri, done, null, null)
-                    pendingUri = null
                 }
+                pendingUri = null
                 "OK"
             } catch (e: Exception) {
                 discardPending()
