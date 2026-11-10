@@ -343,6 +343,7 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
                 try {
                     contentResolver.delete(Uri.parse(uriStr), null, null)
+                    true
                 } catch (e2: Exception) {
                     false
                 }
