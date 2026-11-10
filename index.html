@@ -3912,6 +3912,8 @@ const Zip = (() => {
     // 还没配过目录：先让用户选一个，选完自动扫描
     if (!entries.length) {
       if (btn) { btn.disabled = true; btn.textContent = "选择目录…"; }
+      dockTitle.textContent = "还没有添加扫描目录";
+      dockSub.textContent = "请选择一个包含音乐文件的文件夹";
       scanAfterAdd = true;
       try {
         await DirAPI.add();
