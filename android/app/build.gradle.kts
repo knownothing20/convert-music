@@ -15,9 +15,34 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            // 由 CI 从 Secrets 解密出的固定密钥库，保证每次构建签名一致、可以覆盖安装
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            if (!ksPath.isNullOrBlank()) {
+                val f = rootProject.file(ksPath)
+                if (f.exists()) {
+                    storeFile = f
+                    storeType = "PKCS12"
+                    storePassword = System.getenv("KEYSTORE_PASSWORD")
+                    keyAlias = System.getenv("KEY_ALIAS")
+                    keyPassword = System.getenv("KEY_PASSWORD")
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfigs.findByName("release")?.storeFile?.let {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            signingConfigs.findByName("release")?.storeFile?.let {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
