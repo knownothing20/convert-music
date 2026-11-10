@@ -856,7 +856,7 @@
 
     <div class="set-group" id="dirsBox">
       <div class="set-row">
-        <span class="set-label" style="margin:0">常用目录</span>
+        <span class="set-label" style="margin:0">扫描目录</span>
         <button class="mini" id="addDir" type="button">+ 添加</button>
       </div>
       <div id="dirsList"></div>
@@ -3212,8 +3212,8 @@ const Zip = (() => {
           : "还没有选择目录。选择后所有结果都会保存过去（手机浏览器不支持指定目录）。";
       } else {
         hint.textContent = NATIVE
-          ? "从「常用目录」扫描的文件存回原目录；手动选的文件存到「音乐 / 音乐转换」。原文件不会被改动。"
-          : "从「常用目录」扫描的文件存回原目录（需授权写入）；手动选的文件存到浏览器下载目录。原文件不会被改动。";
+          ? "从「扫描目录」读入的文件存回原目录；手动选的文件存到「音乐 / 音乐转换」。原文件不会被改动。"
+          : "从「扫描目录」读入的文件存回原目录（需授权写入）；手动选的文件存到浏览器下载目录。原文件不会被改动。";
       }
     }
   }
@@ -3734,7 +3734,7 @@ const Zip = (() => {
     if (!scanAfterAdd) return;
     scanAfterAdd = false;
     const btn = $("scanBtn");
-    if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
+    if (btn) { btn.disabled = false; btn.textContent = scanBtnLabel(); }
     let entries = [];
     try { entries = await DirAPI.list(); } catch (e) { entries = []; }
     if (entries.length) await doScan(entries);
@@ -3875,6 +3875,11 @@ const Zip = (() => {
     if (scanBtn) scanBtn.classList.toggle("hidden", !DirAPI);
   }
 
+  function scanBtnLabel() {
+    const n = dirEntries ? dirEntries.length : 0;
+    return n ? "扫描目录 (" + n + ")" : "扫描目录";
+  }
+
   async function doScan(entries) {
     const btn = $("scanBtn");
     if (btn) { btn.disabled = true; btn.textContent = "扫描中…"; }
@@ -3890,7 +3895,7 @@ const Zip = (() => {
       }
     }
 
-    if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
+    if (btn) { btn.disabled = false; btn.textContent = scanBtnLabel(); }
 
     if (!all.length) {
       dockTitle.textContent = failed ? "扫描失败" : "没有找到可转换文件";
@@ -3906,8 +3911,11 @@ const Zip = (() => {
     if (!DirAPI) return;
     const btn = $("scanBtn");
 
-    let entries = [];
-    try { entries = await DirAPI.list(); } catch (e) { entries = []; }
+    // 先用设置面板已加载的目录；没有才重新查询，避免一次读取失败就误判成「没配目录」
+    let entries = (dirEntries && dirEntries.length) ? dirEntries.slice() : [];
+    if (!entries.length) {
+      try { entries = await DirAPI.list(); } catch (e) { entries = []; }
+    }
 
     // 还没配过目录：先让用户选一个，选完自动扫描
     if (!entries.length) {
@@ -3919,14 +3927,14 @@ const Zip = (() => {
         await DirAPI.add();
       } catch (e) {
         scanAfterAdd = false;
-        if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
+        if (btn) { btn.disabled = false; btn.textContent = scanBtnLabel(); }
         return;
       }
 
       // 桌面端 add 会等用户选完才返回；APK 走系统回调，由 __onDirsChanged 接手
       if (DirAPI.kind === "fsa") {
         scanAfterAdd = false;
-        if (btn) { btn.disabled = false; btn.textContent = "扫描目录"; }
+        if (btn) { btn.disabled = false; btn.textContent = scanBtnLabel(); }
         await refreshDirs();
         let after = [];
         try { after = await DirAPI.list(); } catch (e) { after = []; }
@@ -3957,6 +3965,8 @@ const Zip = (() => {
     }
     renderDirs();
     applyDropEnv();
+    const sb = $("scanBtn");
+    if (sb && !sb.disabled) sb.textContent = scanBtnLabel();
   }
 
   function renderDirs() {
