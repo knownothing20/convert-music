@@ -102,9 +102,6 @@ class DirManager(private val ctx: Context) {
             null
         } ?: return "[]"
 
-        // 清掉上一次的临时文件，避免堆积
-        scanDir.listFiles()?.forEach { runCatching { it.delete() } }
-
         val out = JSONArray()
         val limit = 600
 
@@ -117,23 +114,12 @@ class DirManager(private val ctx: Context) {
                 val n = f.name ?: continue
                 if (!SUPPORTED_EXT.containsMatchIn(n.lowercase())) continue
 
-                // 后缀必须是系统 MIME 表认识的类型，否则 InternalStoragePathHandler 会返回 404。
-                // 这里只是临时文件名，内容和真实格式无关。
-                val dest = File(scanDir, UUID.randomUUID().toString().take(8) + ".mp3")
-                val ok = try {
-                    ctx.contentResolver.openInputStream(f.uri)?.use { ins ->
-                        dest.outputStream().use { outs -> ins.copyTo(outs) }
-                        true
-                    } ?: false
-                } catch (e: Exception) {
-                    false
-                }
-                if (!ok) { runCatching { dest.delete() }; continue }
-
+                // 不复制文件，直接把 content URI 交给网页，由原生桥分块读取。
+                // 复制方案占空间，且第二次扫描会清掉第一批临时文件导致地址失效（404）。
                 out.put(JSONObject().apply {
                     put("name", n)
-                    put("size", dest.length())
-                    put("url", "https://appassets.androidplatform.net/scan/" + dest.name)
+                    put("size", f.length())
+                    put("uri", f.uri.toString())
                     // 记录源文件所在目录，便于转换后原地保存
                     put("dir", dir.uri.toString())
                 })

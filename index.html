@@ -3782,16 +3782,32 @@ const Zip = (() => {
                 name: x.name,
                 size: x.size,
                 srcDir: x.dir || "",
-                load: () => fetch(x.url)
-                  .then((r) => {
-                    // 以前不检查状态码，404 的响应体也会被当成文件内容，最后只报「文件太小」
-                    if (!r.ok) throw new Error("HTTP " + r.status);
-                    return r.arrayBuffer();
-                  })
-                  .catch((e) => {
-                    // 带上文件名和地址，出问题时能直接看出是哪个环节
-                    throw new Error("无法读取「" + x.name + "」：" + ((e && e.message) || e));
-                  }),
+                uri: x.uri || "",
+                // 通过原生桥分块读 content URI，不再复制文件、不再依赖 fetch
+                load: async () => {
+                  if (!window.AndroidBridge.openFile(x.uri)) {
+                    throw new Error("无法打开「" + x.name + "」（目录权限可能已失效）");
+                  }
+                  const parts = [];
+                  for (;;) {
+                    const b64 = window.AndroidBridge.readChunk();
+                    if (!b64) break;
+                    const bin = atob(b64);
+                    const u8 = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+                    parts.push(u8);
+                  }
+                  window.AndroidBridge.closeReadFile();
+
+                  let total = 0;
+                  for (const p of parts) total += p.length;
+                  if (!total) throw new Error("「" + x.name + "」读到 0 字节，可能无读取权限");
+
+                  const out = new Uint8Array(total);
+                  let off = 0;
+                  for (const p of parts) { out.set(p, off); off += p.length; }
+                  return out.buffer;
+                },
               })));
             });
             AndroidBridge.dirsScan(id, cb);

@@ -298,6 +298,44 @@ class MainActivity : Activity() {
             }
         }
 
+        /* ---- 分块读取源文件（取代复制到 appassets 的旧方案）---- */
+        private var readStream: java.io.InputStream? = null
+        private val readBuf = ByteArray(2 * 1024 * 1024)
+
+        @JavascriptInterface
+        fun openFile(uriStr: String): Boolean {
+            closeReadFile()
+            return try {
+                readStream = contentResolver.openInputStream(Uri.parse(uriStr))
+                readStream != null
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun readChunk(): String? {
+            val s = readStream ?: return null
+            return try {
+                val n = s.read(readBuf)
+                if (n <= 0) {
+                    closeReadFile()
+                    null
+                } else {
+                    Base64.encodeToString(readBuf, 0, n, Base64.NO_WRAP)
+                }
+            } catch (e: Exception) {
+                closeReadFile()
+                null
+            }
+        }
+
+        @JavascriptInterface
+        fun closeReadFile() {
+            try { readStream?.close() } catch (e: Exception) {}
+            readStream = null
+        }
+
         @JavascriptInterface
         fun appendChunk(base64: String): Boolean {
             val os = stream ?: return false
