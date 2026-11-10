@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -52,6 +54,16 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         dirs = DirManager(this)
+
+        // 状态栏与导航栏跟随页面深色背景，避免顶部出现一条浅色带
+        val pageBg = Color.parseColor("#08090E")
+        window.statusBarColor = pageBg
+        window.navigationBarColor = pageBg
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // 部分 ROM 会给状态栏/导航栏加半透明遮罩，关掉才能与页面同色
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
 
         webView = WebView(this)
         setContentView(webView)

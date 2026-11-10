@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#f4f5f9</item>
-        <item name="android:navigationBarColor">#f4f5f9</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <!-- 与网页背景 (#08090e) 保持一致，避免顶部出现浅色条 -->
+        <item name="android:statusBarColor">#08090E</item>
+        <item name="android:navigationBarColor">#08090E</item>
+        <!-- 深色背景配浅色图标 -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">#08090E</item>
     </style>
 </resources>
