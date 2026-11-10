@@ -506,9 +506,7 @@
   }
   .sheet.show { transform: translateY(0); }
 
-  @media (prefers-color-scheme: light) {
-    .sheet { background: rgba(250, 249, 255, .95); }
-  }
+  /* 全站强制深色，面板背景不跟随系统浅色（否则白底白字） */
 
   .sheet-grip {
     width: 38px; height: 4px;
