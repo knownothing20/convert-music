@@ -1425,9 +1425,33 @@ const Zip = (() => {
     }
   }
 
-  function downloadAll() {
+  async function downloadAll() {
     const doneList = items.filter((i) => i.state === "done" && i.data);
     if (!doneList.length) return false;
+
+    /* APK：逐首保存，各自回到源目录；不打 zip，省得手机上还要解压 */
+    if (NATIVE) {
+      dockTitle.textContent = "正在保存";
+      let failed = 0;
+      for (let i = 0; i < doneList.length; i++) {
+        const it = doneList[i];
+        dockSub.textContent = `${i + 1}/${doneList.length} · ${it.outName}`;
+        try {
+          await saveViaNative(
+            new Blob([it.data], { type: "application/octet-stream" }),
+            it.outName,
+            it.srcDir || ""
+          );
+        } catch (e) {
+          failed++;
+          console.warn("保存失败：" + it.outName, e);
+        }
+      }
+      dockTitle.textContent = failed ? `已保存 ${doneList.length - failed} 个，失败 ${failed} 个` : "已保存";
+      dockSub.textContent = failed ? "失败的可在列表里单独点「下载」重试" : `共 ${doneList.length} 个文件`;
+      return true;
+    }
+
     if (doneList.length === 1) {
       download(new Blob([doneList[0].data], { type: "application/octet-stream" }), doneList[0].outName, doneList[0]);
     } else {
