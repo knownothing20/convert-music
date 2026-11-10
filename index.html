@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>音乐转换</title>
 <meta name="description" content="在本地把 .ncm 还原成 MP3 / FLAC，文件不上传。" />
-<meta name="theme-color" content="#f4f5f9" media="(prefers-color-scheme: light)" />
-<meta name="theme-color" content="#0d0f14" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#08090e" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="音乐转换" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -18,54 +17,43 @@
      设计系统
      ============================================================ */
   :root {
-    /* 纸感中性色：暖白底 + 近黑文字，强调色只用砖红做点缀 */
-    --bg: #f6f4ef;
-    --surface: #ffffff;
-    --surface-2: #f4f2ed;
-    --text: #17150f;
-    --text-2: #6b655c;
-    --text-3: #a39c92;
-    --line: #e6e2da;
-    --line-strong: #d4cec3;
-    --primary: #b23a26;
-    --primary-2: #8c2a18;
+    color-scheme: dark;
+
+    /* 与 App 图标同源：深底 + 紫到粉的渐变 */
+    --bg: #08090e;
+    --surface: rgba(255, 255, 255, .055);
+    --surface-2: rgba(255, 255, 255, .095);
+    --text: #f5f3ff;
+    --text-2: rgba(245, 243, 255, .68);
+    --text-3: rgba(245, 243, 255, .42);
+    --line: rgba(255, 255, 255, .13);
+    --line-strong: rgba(255, 255, 255, .26);
+
+    --primary: #c084fc;
+    --primary-2: #f472b6;
     --primary-ink: #ffffff;
-    --primary-soft: #f7ede9;
-    --ok: #1f6b45;
-    --ok-soft: #eaf3ee;
-    --err: #b3271e;
-    --err-soft: #f8e9e7;
-    --warn: #96601a;
-    --radius-lg: 14px;
-    --radius: 10px;
-    --radius-sm: 8px;
-    --shadow: 0 1px 3px rgba(23, 21, 15, .05);
-    --shadow-lift: 0 2px 10px rgba(23, 21, 15, .08);
-    --dock-bg: rgba(246, 244, 239, .9);
+    --primary-soft: rgba(192, 132, 252, .16);
+
+    --grad: linear-gradient(118deg, #a5a6fa 0%, #d8b4fe 52%, #f9a8d4 100%);
+
+    --ok: #5eead4;
+    --ok-soft: rgba(94, 234, 212, .14);
+    --err: #fb7185;
+    --err-soft: rgba(251, 113, 133, .14);
+    --warn: #fbbf24;
+
+    --radius-lg: 24px;
+    --radius: 16px;
+    --radius-sm: 12px;
+
+    --glass-hi: rgba(255, 255, 255, .22);
+    --shadow: 0 20px 50px -24px rgba(0, 0, 0, .85);
+    --shadow-lift: 0 34px 74px -28px rgba(0, 0, 0, .92);
+    --dock-bg: rgba(10, 11, 17, .62);
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #100f0d;
-      --surface: #191715;
-      --surface-2: #211e1a;
-      --text: #f2efe9;
-      --text-2: #a29b91;
-      --text-3: #6e675e;
-      --line: #2a2622;
-      --line-strong: #3a352f;
-      --primary: #e2654a;
-      --primary-2: #c94f35;
-      --primary-soft: #2a1c18;
-      --ok: #4fbf8b;
-      --ok-soft: #16241d;
-      --err: #ff7a6b;
-      --err-soft: #2a1815;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
-      --shadow-lift: 0 2px 8px rgba(0, 0, 0, .5);
-      --dock-bg: rgba(16, 15, 13, .9);
-    }
-  }
+  /* 强制深色：App 图标是深色玻璃底，页面跟随同一套底色才能视觉统一。
+     浅色玻璃在浅底上会退化成白色卡片，水晶感全丢。 */
 
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -81,7 +69,32 @@
     overflow-x: hidden;
   }
 
-  /* 不用彩色背景光晕：柔和光斑是 AI 模板感的主要来源，纯色底更耐看 */
+  /* 背景：深色玻璃底 + 大面积柔光 + 极细噪点。
+     柔光负责“光”，噪点消除纯色平面的廉价感，两者叠加才有介质感。 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(920px 640px at 8% -14%, rgba(139, 140, 248, .22), transparent 60%),
+      radial-gradient(840px 580px at 94% 0%, rgba(244, 114, 182, .14), transparent 62%),
+      radial-gradient(780px 580px at 58% 46%, rgba(168, 85, 247, .16), transparent 64%),
+      radial-gradient(1040px 820px at 50% 114%, rgba(192, 132, 252, .12), transparent 70%);
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: .028;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* 深色底上的柔光已经足够，无需浅色分支 */
 
   .app {
     position: relative;
@@ -115,20 +128,25 @@
   }
 
   h1 {
-    margin: 0 0 8px;
-    font-size: 29px;
-    line-height: 1.24;
-    letter-spacing: -.7px;
+    margin: 0 0 12px;
+    font-size: 33px;
+    line-height: 1.16;
+    letter-spacing: -1px;
     font-weight: 700;
   }
   h1 em {
     font-style: normal;
     color: var(--primary);
+    background: var(--grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
   .lede {
     margin: 0;
     color: var(--text-2);
-    font-size: 14px;
+    font-size: 14.5px;
+    line-height: 1.72;
   }
 
   /* ============================================================
@@ -136,35 +154,58 @@
      ============================================================ */
   .drop {
     position: relative;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 5px;
-    padding: 34px 22px 30px;
-    margin-top: 20px;
-    background: var(--surface);
+    padding: 36px 22px 32px;
+    margin-top: 22px;
+    background: linear-gradient(160deg, rgba(255, 255, 255, .085), rgba(255, 255, 255, .022));
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    backdrop-filter: blur(22px) saturate(150%);
     border: 1px solid var(--line);
+    border-top-color: var(--glass-hi);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .16);
     cursor: pointer;
     text-align: center;
-    transition: border-color .18s, background .18s, transform .18s, box-shadow .18s;
+    transition: border-color .2s, box-shadow .2s, transform .2s, background .2s;
   }
-  .drop:hover { border-color: var(--line-strong); background: var(--surface-2); }
+  /* 顶部内反光：玻璃厚度的来源 */
+  .drop::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .10), transparent 44%);
+  }
+  .drop > * { position: relative; z-index: 1; }
+  .drop:hover {
+    border-color: var(--line-strong);
+    border-top-color: rgba(255, 255, 255, .5);
+    background: linear-gradient(160deg, rgba(255, 255, 255, .15), rgba(255, 255, 255, .05));
+  }
   .drop:active { transform: scale(.995); }
   .drop.over {
-    border-color: var(--text);
-    background: var(--surface-2);
-    box-shadow: none;
+    border-color: var(--primary);
+    border-top-color: #fff;
+    box-shadow: var(--shadow-lift), 0 0 0 3px rgba(192, 132, 252, .2), inset 0 1px 0 rgba(255, 255, 255, .3);
   }
   .drop-icon {
-    width: 54px; height: 54px;
+    width: 56px; height: 56px;
     display: grid; place-items: center;
-    border-radius: 12px;
-    background: var(--surface-2);
-    color: var(--text-2);
-    margin-bottom: 9px;
-    transition: transform .2s;
+    border-radius: 17px;
+    background: linear-gradient(150deg, rgba(255, 255, 255, .24), rgba(255, 255, 255, .05));
+    border: 1px solid rgba(255, 255, 255, .22);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .40),
+      inset 0 -6px 12px -8px rgba(0, 0, 0, .5),
+      0 8px 18px -10px rgba(0, 0, 0, .7);
+    color: #fff;
+    margin-bottom: 10px;
+    transition: transform .22s;
   }
   .drop.over .drop-icon { transform: translateY(-3px) scale(1.05); }
   .drop-title { font-size: 15.5px; font-weight: 650; }
@@ -180,51 +221,68 @@
   .btn {
     appearance: none;
     border: 1px solid var(--line);
-    background: var(--surface);
+    border-top-color: rgba(255, 255, 255, .24);
+    background: linear-gradient(160deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, .03));
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
     color: var(--text);
     font: inherit;
     font-size: 13.5px;
     font-weight: 600;
     padding: 10px 17px;
-    border-radius: 9px;
+    border-radius: 12px;
     cursor: pointer;
-    transition: .16s ease;
+    transition: .18s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 6px 16px -12px rgba(0, 0, 0, .8);
   }
   .btn:hover:not(:disabled) { border-color: var(--line-strong); transform: translateY(-1px); }
   .btn:active:not(:disabled) { transform: translateY(0) scale(.985); }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
 
   .btn.primary {
-    background: var(--text);
-    border: 1px solid var(--text);
-    color: var(--bg);
-    box-shadow: none;
+    background: var(--grad);
+    border: 1px solid rgba(255, 255, 255, .30);
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(60, 20, 90, .38);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .55),
+      inset 0 -8px 14px -10px rgba(88, 28, 135, .85),
+      0 14px 30px -14px rgba(168, 85, 247, .9);
   }
   .btn.primary:hover:not(:disabled) {
-    background: var(--text-2);
-    border-color: var(--text-2);
+    filter: brightness(1.08) saturate(1.06);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .62),
+      inset 0 -8px 14px -10px rgba(88, 28, 135, .85),
+      0 18px 38px -14px rgba(168, 85, 247, 1);
   }
 
   .btn.quiet {
     border-color: transparent;
     background: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     color: var(--text-2);
   }
-  .btn.quiet:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+  .btn.quiet:hover:not(:disabled) { background: rgba(255, 255, 255, .08); color: var(--text); }
 
   /* ============================================================
      文件列表
      ============================================================ */
   .panel {
     margin-top: 20px;
-    background: var(--surface);
+    background: linear-gradient(160deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .028));
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    backdrop-filter: blur(20px) saturate(150%);
     border: 1px solid var(--line);
+    border-top-color: var(--glass-hi);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .14);
     overflow: hidden;
   }
   .panel-head {
@@ -250,6 +308,7 @@
     animation: rise .28s cubic-bezier(.2, .7, .3, 1) both;
   }
   .row:last-child { border-bottom: none; }
+  .row:hover { background: rgba(255, 255, 255, .03); }
 
   @keyframes rise {
     from { opacity: 0; transform: translateY(7px); }
@@ -265,12 +324,12 @@
     font-weight: 800;
     letter-spacing: .5px;
     border-radius: 8px;
-    background: var(--surface-2);
+    background: rgba(255, 255, 255, .07);
     color: var(--text-3);
     border: 1px solid var(--line);
   }
-  .tag.flac { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
-  .tag.mp3  { background: var(--primary-soft); color: var(--primary); border-color: transparent; }
+  .tag.flac { background: var(--ok-soft); color: var(--ok); border-color: rgba(94, 234, 212, .28); }
+  .tag.mp3  { background: var(--primary-soft); color: var(--primary); border-color: rgba(192, 132, 252, .28); }
 
   .meta { flex: 1; min-width: 0; }
   .meta .n {
@@ -329,9 +388,10 @@
     z-index: 20;
     padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
     background: var(--dock-bg);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
-    backdrop-filter: blur(18px) saturate(160%);
-    border-top: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(26px) saturate(170%);
+    backdrop-filter: blur(26px) saturate(170%);
+    border-top: 1px solid rgba(255, 255, 255, .12);
+    box-shadow: 0 -12px 34px -22px rgba(0, 0, 0, .85);
     transition: transform .26s cubic-bezier(.2, .7, .3, 1), opacity .2s;
   }
   .dock.hide { transform: translateY(110%); opacity: 0; pointer-events: none; }
