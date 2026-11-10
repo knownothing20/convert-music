@@ -632,6 +632,9 @@
   #dirsBox { border-bottom: 1px solid var(--line); }
   #dirsBox .dir-item { padding-left: 0; padding-right: 0; }
   #dirsBox .dir-empty { padding: 12px 0 4px; text-align: left; }
+  #saveDirRow { padding: 8px 0 0; }
+  #saveDirRow .n { font-size: 13px; color: var(--text-2); }
+  .set-hint { margin-top: 10px; }
 
   .mini {
     appearance: none;
@@ -841,6 +844,14 @@
 
     <div class="set-group" id="saveGroup">
       <div class="set-label">保存位置</div>
+      <div class="radios" id="saveRadios">
+        <label class="radio"><input type="radio" name="sp" value="source" /><span>源文件所在目录</span></label>
+        <label class="radio"><input type="radio" name="sp" value="custom" id="spCustom" /><span>指定目录</span></label>
+      </div>
+      <div class="dir-item hidden" id="saveDirRow">
+        <span class="n" id="saveDirName">未选择</span>
+        <button class="mini" id="pickSaveDir" type="button">选择</button>
+      </div>
       <p class="set-hint" id="saveHint">—</p>
     </div>
   </div>
@@ -1233,6 +1244,39 @@ const Zip = (() => {
   const nameRadios = $("nameRadios");
   const autoSaveEl = $("autoSave");
 
+  /* ---- 保存位置：源文件目录 / 指定目录 ---- */
+  let saveMode = localStorage.getItem("cm-save-mode") || "source";
+  let saveDirName = "";
+  let saveDirUri = "";       // APK：content:// 目录
+  let saveDirHandle = null;  // 桌面：FSA 目录句柄
+
+  const saveRadios = $("saveRadios");
+  const saveDirRow = $("saveDirRow");
+  const saveDirNameEl = $("saveDirName");
+
+  function syncSaveOpts() {
+    if (saveRadios) {
+      saveRadios.querySelectorAll("input").forEach((r) => {
+        r.checked = r.value === saveMode;
+      });
+    }
+    if (saveDirRow) saveDirRow.classList.toggle("hidden", saveMode !== "custom");
+    if (saveDirNameEl) saveDirNameEl.textContent = saveDirName || "未选择";
+
+    const hint = $("saveHint");
+    if (hint) {
+      if (saveMode === "custom") {
+        hint.textContent = saveDirName
+          ? `所有转换结果都保存到「${saveDirName}」。原文件不会被改动。`
+          : "还没有选择目录。选择后所有结果都会保存过去（手机浏览器不支持指定目录）。";
+      } else {
+        hint.textContent = NATIVE
+          ? "从「常用目录」扫描的文件存回原目录；手动选的文件存到「音乐 / 音乐转换」。原文件不会被改动。"
+          : "从「常用目录」扫描的文件存回原目录（需授权写入）；手动选的文件存到浏览器下载目录。原文件不会被改动。";
+      }
+    }
+  }
+
   function syncOpts() {
     if (nameRadios) {
       nameRadios.querySelectorAll("input").forEach((r) => {
@@ -1247,6 +1291,15 @@ const Zip = (() => {
       if (e.target.name !== "nm") return;
       nameMode = e.target.value;
       localStorage.setItem("cm-name-mode", nameMode);
+    });
+  }
+
+  if (saveRadios) {
+    saveRadios.addEventListener("change", (e) => {
+      if (e.target.name !== "sp") return;
+      saveMode = e.target.value;
+      localStorage.setItem("cm-save-mode", saveMode);
+      syncSaveOpts();
     });
   }
   if (autoSaveEl) {
@@ -1438,7 +1491,7 @@ const Zip = (() => {
           await saveViaNative(
             new Blob([it.data], { type: "application/octet-stream" }),
             it.outName,
-            it.srcDir || ""
+            targetDirFor(it)
           );
         } catch (e) {
           failed++;
@@ -1538,14 +1591,109 @@ const Zip = (() => {
   /* ---- 下载：网页用 a[download]，APK 里走原生桥接（WebView 不支持 blob 下载）---- */
   const NATIVE = typeof window.AndroidBridge !== "undefined" && window.AndroidBridge !== null;
 
-  /* 保存位置说明：不同环境落点不同，直接写清楚 */
-  (function initSaveHint() {
-    const el = $("saveHint");
-    if (!el) return;
-    el.textContent = NATIVE
-      ? "从「常用目录」扫描的文件，转换后存回原目录；手动选的文件存到「音乐 / 音乐转换」。原文件不会被改动。"
-      : "从「常用目录」扫描的文件，转换后存回原目录（需授权写入）；手动选的文件存到浏览器下载目录。原文件不会被改动。";
-  })();
+  /* 保存位置说明与指定目录 */
+
+  /* ---- 指定保存目录（桌面用 IndexedDB 存句柄）---- */
+  const SaveDirDB = {
+    _p: null,
+    open() {
+      if (this._p) return this._p;
+      this._p = new Promise((res, rej) => {
+        const r = indexedDB.open("ncm-save", 1);
+        r.onupgradeneeded = () => {
+          if (!r.result.objectStoreNames.contains("h")) r.result.createObjectStore("h");
+        };
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+      return this._p;
+    },
+    async get() {
+      const db = await this.open();
+      return new Promise((res, rej) => {
+        const q = db.transaction("h", "readonly").objectStore("h").get("dir");
+        q.onsuccess = () => res(q.result || null);
+        q.onerror = () => rej(q.error);
+      });
+    },
+    async set(rec) {
+      const db = await this.open();
+      return new Promise((res, rej) => {
+        const q = db.transaction("h", "readwrite").objectStore("h").put(rec, "dir");
+        q.onsuccess = () => res();
+        q.onerror = () => rej(q.error);
+      });
+    },
+  };
+
+  async function loadSaveDir() {
+    if (NATIVE && typeof window.AndroidBridge.saveDirGet === "function") {
+      try {
+        const raw = window.AndroidBridge.saveDirGet();
+        if (raw) {
+          const o = JSON.parse(raw);
+          saveDirUri = o.uri || "";
+          saveDirName = o.name || "";
+        } else {
+          saveDirUri = "";
+          saveDirName = "";
+        }
+      } catch (e) { /* 忽略 */ }
+      syncSaveOpts();
+      return;
+    }
+
+    try {
+      const rec = await SaveDirDB.get();
+      if (rec && rec.handle) {
+        saveDirHandle = rec.handle;
+        saveDirName = rec.name || rec.handle.name || "";
+      }
+    } catch (e) { /* 忽略 */ }
+    syncSaveOpts();
+  }
+
+  window.__onSaveDirChanged = () => { loadSaveDir(); };
+  window.__onSaveDirError = (msg) => {
+    dockTitle.textContent = "选择目录失败";
+    dockSub.textContent = msg;
+  };
+
+  if ($("pickSaveDir")) {
+    $("pickSaveDir").addEventListener("click", async () => {
+      if (NATIVE && typeof window.AndroidBridge.saveDirPick === "function") {
+        window.AndroidBridge.saveDirPick();
+        return;
+      }
+      if (typeof window.showDirectoryPicker === "function") {
+        try {
+          const h = await window.showDirectoryPicker({ mode: "readwrite" });
+          saveDirHandle = h;
+          saveDirName = h.name;
+          await SaveDirDB.set({ name: h.name, handle: h });
+          syncSaveOpts();
+        } catch (e) {
+          if (e && e.name !== "AbortError") {
+            dockTitle.textContent = "选择目录失败";
+            dockSub.textContent = (e && e.message) || String(e);
+          }
+        }
+      } else {
+        dockTitle.textContent = "当前环境不支持";
+        dockSub.textContent = "该浏览器无法指定目录，只能用源目录或下载目录";
+      }
+    });
+  }
+
+  /* 某个文件最终存到哪 */
+  function targetDirFor(it) {
+    if (saveMode === "custom" && saveDirUri) return saveDirUri;
+    if (it && it.srcDir) return it.srcDir;
+    return "";
+  }
+
+  loadSaveDir();
+  syncSaveOpts();
 
   function bytesToBase64(bytes) {
     let binary = "";
@@ -1583,33 +1731,40 @@ const Zip = (() => {
   }
 
   async function download(blob, name, item) {
-    /* 1) 优先写回源目录（桌面 FSA） */
-    if (item && item.dirHandle) {
+    /* 1) 优先写回目录（桌面 FSA）：指定目录 > 源目录 */
+    const fsaTarget = (saveMode === "custom" && saveDirHandle)
+      ? saveDirHandle
+      : (item ? item.dirHandle : null);
+
+    if (fsaTarget) {
       try {
         const opt = { mode: "readwrite" };
-        let perm = await item.dirHandle.queryPermission(opt);
-        if (perm !== "granted") perm = await item.dirHandle.requestPermission(opt);
+        let perm = await fsaTarget.queryPermission(opt);
+        if (perm !== "granted") perm = await fsaTarget.requestPermission(opt);
         if (perm === "granted") {
-          const fh = await item.dirHandle.getFileHandle(name, { create: true });
+          const fh = await fsaTarget.getFileHandle(name, { create: true });
           const w = await fh.createWritable();
           await w.write(blob);
           await w.close();
-          dockTitle.textContent = "已保存到源目录";
-          dockSub.textContent = name;
+          dockTitle.textContent = "已保存";
+          dockSub.textContent = saveMode === "custom" ? "已保存到指定目录" : "已保存到源目录";
           return;
         }
       } catch (e) {
-        console.warn("写入源目录失败，回退到普通下载", e);
+        console.warn("写入目录失败，回退到普通下载", e);
       }
     }
 
     if (NATIVE) {
-      const toDir = !!(item && item.srcDir);
-      dockTitle.textContent = toDir ? "正在保存到源目录" : "正在保存到本机";
-      saveViaNative(blob, name, toDir ? item.srcDir : "")
+      const dirUri = targetDirFor(item);
+      const isCustom = saveMode === "custom" && !!saveDirUri;
+      dockTitle.textContent = "正在保存";
+      saveViaNative(blob, name, dirUri)
         .then(() => {
-          dockTitle.textContent = toDir ? "已保存到源目录" : "已保存";
-          dockSub.textContent = toDir ? name : "文件在「音乐/音乐转换」文件夹";
+          dockTitle.textContent = "已保存";
+          dockSub.textContent = dirUri
+            ? (isCustom ? "已保存到指定目录" : "已保存到源目录")
+            : "文件在「音乐/音乐转换」文件夹";
         })
         .catch((e) => {
           dockTitle.textContent = "保存失败";

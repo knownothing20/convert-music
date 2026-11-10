@@ -139,4 +139,27 @@ class DirManager(private val ctx: Context) {
     fun cleanup() {
         scanDir.listFiles()?.forEach { runCatching { it.delete() } }
     }
+
+    /* ---------------- 指定保存目录 ---------------- */
+
+    fun saveDirGet(): String {
+        val uri = prefs.getString("saveDir", "") ?: ""
+        if (uri.isEmpty()) return ""
+        val name = prefs.getString("saveDirName", "") ?: ""
+        return JSONObject().apply {
+            put("uri", uri)
+            put("name", name)
+        }.toString()
+    }
+
+    fun saveDirSet(uri: Uri, name: String) {
+        prefs.edit()
+            .putString("saveDir", uri.toString())
+            .putString("saveDirName", name)
+            .apply()
+    }
+
+    fun saveDirClear() {
+        prefs.edit().remove("saveDir").remove("saveDirName").apply()
+    }
 }

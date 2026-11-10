@@ -43,6 +43,7 @@ class MainActivity : Activity() {
     private companion object {
         const val FILE_REQ = 1001
         const val DIR_REQ = 1002
+        const val SAVE_DIR_REQ = 1003
         const val HOST = "https://appassets.androidplatform.net"
     }
 
@@ -134,6 +135,30 @@ class MainActivity : Activity() {
                 dirs.add(uri, name)
                 webView.evaluateJavascript(
                     "window.__onDirsChanged && window.__onDirsChanged()", null
+                )
+            }
+            return
+        }
+
+        if (requestCode == SAVE_DIR_REQ) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (e: Exception) { /* 忽略 */ }
+
+                val name = try {
+                    DocumentFile.fromTreeUri(this, uri)?.name
+                } catch (e: Exception) {
+                    null
+                } ?: "目录"
+
+                dirs.saveDirSet(uri, name)
+                webView.evaluateJavascript(
+                    "window.__onSaveDirChanged && window.__onSaveDirChanged()", null
                 )
             }
             return
@@ -303,6 +328,32 @@ class MainActivity : Activity() {
                 } catch (e: Exception) {
                     webView.evaluateJavascript(
                         "window.__onDirError && window.__onDirError('无法打开目录选择器')", null
+                    )
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun saveDirGet(): String = dirs.saveDirGet()
+
+        @JavascriptInterface
+        fun saveDirClear() { dirs.saveDirClear() }
+
+        @JavascriptInterface
+        fun saveDirPick() {
+            ui.post {
+                try {
+                    val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                        addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                        )
+                    }
+                    startActivityForResult(i, SAVE_DIR_REQ)
+                } catch (e: Exception) {
+                    webView.evaluateJavascript(
+                        "window.__onSaveDirError && window.__onSaveDirError('无法打开目录选择器')", null
                     )
                 }
             }
