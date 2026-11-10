@@ -101,7 +101,18 @@
     z-index: 1;
     max-width: 680px;
     margin: 0 auto;
-    padding: calc(26px + env(safe-area-inset-top)) 18px 190px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: calc(40px + env(safe-area-inset-top)) 18px calc(48px + env(safe-area-inset-bottom));
+  }
+
+  /* 有文件列表后内容变长，切回顶部对齐，并给固定底栏留出空间 */
+  body.has-files .app {
+    justify-content: flex-start;
+    padding-bottom: calc(190px + env(safe-area-inset-bottom));
   }
 
   /* ============================================================
@@ -160,7 +171,7 @@
     align-items: center;
     gap: 5px;
     padding: 36px 22px 32px;
-    margin-top: 22px;
+    margin-top: 4px;
     background: linear-gradient(160deg, rgba(255, 255, 255, .085), rgba(255, 255, 255, .022));
     -webkit-backdrop-filter: blur(22px) saturate(150%);
     backdrop-filter: blur(22px) saturate(150%);
@@ -968,6 +979,7 @@ const Zip = (() => {
     const has = items.length > 0;
     panel.classList.toggle("hidden", !has);
     dock.classList.toggle("hide", !has);
+    document.body.classList.toggle("has-files", has);
     if (!has) { rowsEl.innerHTML = ""; countEl.textContent = ""; return; }
 
     const done = items.filter((i) => i.state === "done").length;
