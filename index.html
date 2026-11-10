@@ -106,7 +106,10 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: calc(40px + env(safe-area-inset-top)) 18px calc(48px + env(safe-area-inset-bottom));
+    /* 沉浸式下状态栏盖在页面之上，用安全区避让；
+       env() 由浏览器/WebView 提供，--app-safe-* 是原生侧的兜底注入 */
+    padding: calc(40px + max(env(safe-area-inset-top), var(--app-safe-top, 0px))) 18px
+             calc(48px + max(env(safe-area-inset-bottom), var(--app-safe-bottom, 0px)));
   }
 
   /* 有文件列表后内容变长，切回顶部对齐，并给固定底栏留出空间 */

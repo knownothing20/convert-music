@@ -17,6 +17,8 @@ import android.util.Base64
 import android.view.KeyEvent
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
+import android.view.View
+import android.view.WindowInsets
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -40,6 +42,8 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var dirs: DirManager
     private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private var safeTop = 0
+    private var safeBottom = 0
     private val ui = Handler(Looper.getMainLooper())
 
     private companion object {
@@ -55,12 +59,20 @@ class MainActivity : Activity() {
 
         dirs = DirManager(this)
 
-        // 状态栏与导航栏跟随页面深色背景，避免顶部出现一条浅色带
-        val pageBg = Color.parseColor("#08090E")
-        window.statusBarColor = pageBg
-        window.navigationBarColor = pageBg
+        // 沉浸式：页面延伸到状态栏/导航栏下方，状态栏透明，背景（含渐变光斑）直接透上去
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        }
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // 部分 ROM 会给状态栏/导航栏加半透明遮罩，关掉才能与页面同色
+            // 部分 ROM 会给状态栏/导航栏加半透明遮罩，关掉才能完全透出页面背景
             window.isStatusBarContrastEnforced = false
             window.isNavigationBarContrastEnforced = false
         }
@@ -87,6 +99,26 @@ class MainActivity : Activity() {
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? = loader.shouldInterceptRequest(request.url)
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                applySafeArea()
+            }
+        }
+
+        // 监听系统栏尺寸，供页面做安全区留白
+        webView.setOnApplyWindowInsetsListener { _, insets ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val bars = insets.getInsets(WindowInsets.Type.systemBars())
+                safeTop = bars.top
+                safeBottom = bars.bottom
+            } else {
+                @Suppress("DEPRECATION")
+                safeTop = insets.systemWindowInsetTop
+                @Suppress("DEPRECATION")
+                safeBottom = insets.systemWindowInsetBottom
+            }
+            insets
         }
 
         webView.addJavascriptInterface(Bridge(), "AndroidBridge")
@@ -185,6 +217,16 @@ class MainActivity : Activity() {
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    /** 把状态栏/导航栏高度写给页面，CSS 用它做留白 */
+    private fun applySafeArea() {
+        if (safeTop <= 0 && safeBottom <= 0) return
+        webView.evaluateJavascript(
+            "document.documentElement.style.setProperty('--app-safe-top','" + safeTop + "px');" +
+                "document.documentElement.style.setProperty('--app-safe-bottom','" + safeBottom + "px');",
+            null
+        )
     }
 
     inner class Bridge {
