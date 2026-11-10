@@ -335,6 +335,20 @@ class MainActivity : Activity() {
             }
         }
 
+        /** 删除扫描进来的源文件（保存成功后由用户确认触发） */
+        @JavascriptInterface
+        fun deleteSource(uriStr: String): Boolean {
+            return try {
+                DocumentsContract.deleteDocument(contentResolver, Uri.parse(uriStr))
+            } catch (e: Exception) {
+                try {
+                    contentResolver.delete(Uri.parse(uriStr), null, null)
+                } catch (e2: Exception) {
+                    false
+                }
+            }
+        }
+
         @JavascriptInterface
         fun closeReadFile() {
             try { readStream?.close() } catch (e: Exception) {}

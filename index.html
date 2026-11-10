@@ -655,6 +655,34 @@
   }
   .switch:checked::after { transform: translateX(17px); }
 
+  /* 删除源文件确认框 */
+  .modal {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(4, 5, 10, .6);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    padding: 24px;
+  }
+  .modal.hidden { display: none; }
+  .modal-card {
+    width: 100%; max-width: 340px;
+    border-radius: 18px;
+    border: 1px solid var(--line-strong);
+    background: rgba(22, 20, 28, .96);
+    padding: 22px 20px 18px;
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .9);
+  }
+  .modal-title { font-size: 15.5px; font-weight: 700; color: var(--text); line-height: 1.5; }
+  .modal-sub { margin-top: 8px; font-size: 12.5px; color: var(--text-3); line-height: 1.6; }
+  .modal-actions { margin-top: 18px; display: flex; gap: 9px; }
+  .modal-actions .btn { flex: 1; min-width: 0; }
+  .modal-actions .btn.danger {
+    background: rgba(239, 68, 68, .22);
+    border-color: rgba(248, 113, 113, .4);
+    color: #fecaca;
+  }
+  .modal-actions .btn.danger:hover { background: rgba(239, 68, 68, .32); }
+
   /* 首页的常用目录快捷入口已合并到「扫描目录」按钮，样式保留备用 */
 
   /* ============================================================
@@ -828,6 +856,18 @@
 </div>
 
 <!-- 设置面板 -->
+<!-- 删除源文件确认框 -->
+<div class="modal hidden" id="confirmModal">
+  <div class="modal-card">
+    <div class="modal-title" id="confirmTitle"></div>
+    <div class="modal-sub" id="confirmSub"></div>
+    <div class="modal-actions">
+      <button class="btn" id="confirmCancel" type="button">保留</button>
+      <button class="btn danger" id="confirmOk" type="button">删除</button>
+    </div>
+  </div>
+</div>
+
 <div class="sheet-mask" id="sheetMask"></div>
 <section class="sheet" id="sheet" aria-hidden="true">
   <div class="sheet-grip"></div>
@@ -3391,7 +3431,7 @@ const Zip = (() => {
       items.push({
         id: ++uid, file: f, name: f.name, size: f.size,
         outName: "", format: "", state: "idle", progress: 0, err: "", data: null,
-        srcDir: f.srcDir || "", dirHandle: f.dirHandle || null,
+        srcDir: f.srcDir || "", dirHandle: f.dirHandle || null, uri: f.uri || "",
       });
     }
     render();
@@ -3441,6 +3481,7 @@ const Zip = (() => {
       }
       dockTitle.textContent = failed ? `已保存 ${doneList.length - failed} 个，失败 ${failed} 个` : "已保存";
       dockSub.textContent = failed ? "失败的可在列表里单独点「下载」重试" : `共 ${doneList.length} 个文件`;
+      askDeleteSources(doneList);
       return true;
     }
 
@@ -3626,6 +3667,52 @@ const Zip = (() => {
     });
   }
 
+  /* ---- 保存成功后询问是否删除源文件（仅 APK：浏览器删不了用户选的文件）---- */
+  function showConfirm(title, sub, onOk) {
+    const m = $("confirmModal");
+    $("confirmTitle").textContent = title;
+    $("confirmSub").textContent = sub || "";
+    m.classList.remove("hidden");
+    const ok = $("confirmOk"), cancel = $("confirmCancel");
+    const close = () => {
+      m.classList.add("hidden");
+      ok.onclick = null; cancel.onclick = null;
+    };
+    ok.onclick = () => { close(); if (onOk) onOk(); };
+    cancel.onclick = close;
+  }
+
+  function canDeleteSources() {
+    return !!(NATIVE && window.AndroidBridge && typeof window.AndroidBridge.deleteSource === "function");
+  }
+
+  function askDeleteSources(savedItems) {
+    if (!canDeleteSources()) return;
+    const deletable = (savedItems || []).filter((it) => it && it.uri);
+    if (!deletable.length) return;
+
+    const n = deletable.length;
+    showConfirm(
+      n === 1
+        ? "是否删除源文件「" + deletable[0].name + "」？"
+        : "已保存 " + n + " 个文件，是否删除对应的源文件？",
+      "删除后不可恢复；已保存的音乐不受影响。仅供清理已转换的加密文件。",
+      async () => {
+        let ok = 0, fail = 0;
+        for (const it of deletable) {
+          try {
+            if (window.AndroidBridge.deleteSource(it.uri)) ok++;
+            else fail++;
+          } catch (e) { fail++; }
+        }
+        dockTitle.textContent = fail
+          ? "已删除 " + ok + " 个，失败 " + fail + " 个"
+          : "已删除 " + ok + " 个源文件";
+        dockSub.textContent = "已保存的音乐不受影响";
+      }
+    );
+  }
+
   /* 某个文件最终存到哪 */
   function targetDirFor(it) {
     if (saveMode === "custom" && saveDirUri) return saveDirUri;
@@ -3706,6 +3793,7 @@ const Zip = (() => {
           dockSub.textContent = dirUri
             ? (isCustom ? "已保存到指定目录" : "已保存到源目录")
             : "文件在「音乐/音乐转换」文件夹";
+          if (item) askDeleteSources([item]);
         })
         .catch((e) => {
           dockTitle.textContent = "保存失败";
