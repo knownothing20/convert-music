@@ -18,55 +18,52 @@
      设计系统
      ============================================================ */
   :root {
-    --bg: #f4f5f9;
-    --bg-glow-1: rgba(99, 102, 241, .10);
-    --bg-glow-2: rgba(168, 85, 247, .08);
+    /* 纸感中性色：暖白底 + 近黑文字，强调色只用砖红做点缀 */
+    --bg: #f6f4ef;
     --surface: #ffffff;
-    --surface-2: #fafbfd;
-    --text: #12141a;
-    --text-2: #5b6473;
-    --text-3: #98a0b0;
-    --line: #e7eaf1;
-    --line-strong: #d7dce7;
-    --primary: #5b5bd6;
-    --primary-2: #8b5cf6;
+    --surface-2: #f4f2ed;
+    --text: #17150f;
+    --text-2: #6b655c;
+    --text-3: #a39c92;
+    --line: #e6e2da;
+    --line-strong: #d4cec3;
+    --primary: #b23a26;
+    --primary-2: #8c2a18;
     --primary-ink: #ffffff;
-    --primary-soft: #eeefff;
-    --ok: #0d8f4f;
-    --ok-soft: #e6f7ee;
-    --err: #d93a3f;
-    --err-soft: #fdeceb;
-    --warn: #b4720f;
-    --radius-lg: 22px;
-    --radius: 16px;
-    --radius-sm: 11px;
-    --shadow: 0 1px 2px rgba(16, 20, 35, .04), 0 14px 34px -22px rgba(16, 20, 35, .22);
-    --shadow-lift: 0 2px 6px rgba(16, 20, 35, .05), 0 22px 48px -26px rgba(16, 20, 35, .28);
-    --dock-bg: rgba(255, 255, 255, .82);
+    --primary-soft: #f7ede9;
+    --ok: #1f6b45;
+    --ok-soft: #eaf3ee;
+    --err: #b3271e;
+    --err-soft: #f8e9e7;
+    --warn: #96601a;
+    --radius-lg: 14px;
+    --radius: 10px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(23, 21, 15, .05);
+    --shadow-lift: 0 2px 10px rgba(23, 21, 15, .08);
+    --dock-bg: rgba(246, 244, 239, .9);
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0d0f14;
-      --bg-glow-1: rgba(99, 102, 241, .16);
-      --bg-glow-2: rgba(168, 85, 247, .10);
-      --surface: #161920;
-      --surface-2: #1b1f28;
-      --text: #eef1f7;
-      --text-2: #9aa3b6;
-      --text-3: #6b7488;
-      --line: #242936;
-      --line-strong: #303646;
-      --primary: #7c7cf0;
-      --primary-2: #a78bfa;
-      --primary-soft: #1e2035;
-      --ok: #35d07f;
-      --ok-soft: #152a20;
-      --err: #ff6b6e;
-      --err-soft: #2c1a1b;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 14px 34px -22px rgba(0, 0, 0, .7);
-      --shadow-lift: 0 2px 6px rgba(0, 0, 0, .35), 0 22px 48px -26px rgba(0, 0, 0, .8);
-      --dock-bg: rgba(13, 15, 20, .82);
+      --bg: #100f0d;
+      --surface: #191715;
+      --surface-2: #211e1a;
+      --text: #f2efe9;
+      --text-2: #a29b91;
+      --text-3: #6e675e;
+      --line: #2a2622;
+      --line-strong: #3a352f;
+      --primary: #e2654a;
+      --primary-2: #c94f35;
+      --primary-soft: #2a1c18;
+      --ok: #4fbf8b;
+      --ok-soft: #16241d;
+      --err: #ff7a6b;
+      --err-soft: #2a1815;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+      --shadow-lift: 0 2px 8px rgba(0, 0, 0, .5);
+      --dock-bg: rgba(16, 15, 13, .9);
     }
   }
 
@@ -84,20 +81,7 @@
     overflow-x: hidden;
   }
 
-  /* 背景光晕（宽度严格限制在视口内，避免产生横向溢出） */
-  body::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 70vh;
-    background:
-      radial-gradient(52% 60% at 24% 28%, var(--bg-glow-1), transparent 68%),
-      radial-gradient(48% 56% at 78% 12%, var(--bg-glow-2), transparent 70%);
-    pointer-events: none;
-    z-index: 0;
-  }
+  /* 不用彩色背景光晕：柔和光斑是 AI 模板感的主要来源，纯色底更耐看 */
 
   .app {
     position: relative;
@@ -112,23 +96,22 @@
      ============================================================ */
   header { margin-bottom: 22px; }
 
+  /* 顶部标注：去掉彩色胶囊，只留一个小圆点 + 灰字 */
   .eyebrow {
     display: inline-flex;
     align-items: center;
     gap: 7px;
     font-size: 12px;
-    font-weight: 600;
-    letter-spacing: .04em;
-    color: var(--primary);
-    background: var(--primary-soft);
-    padding: 5px 11px;
-    border-radius: 999px;
-    margin-bottom: 13px;
+    font-weight: 500;
+    letter-spacing: .02em;
+    color: var(--text-3);
+    background: none;
+    padding: 0;
+    margin-bottom: 14px;
   }
   .eyebrow .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--primary);
   }
 
   h1 {
@@ -140,10 +123,7 @@
   }
   h1 em {
     font-style: normal;
-    background: linear-gradient(100deg, var(--primary), var(--primary-2));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--primary);
   }
   .lede {
     margin: 0;
@@ -163,26 +143,26 @@
     padding: 34px 22px 30px;
     margin-top: 20px;
     background: var(--surface);
-    border: 1.5px dashed var(--line-strong);
+    border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow);
     cursor: pointer;
     text-align: center;
     transition: border-color .18s, background .18s, transform .18s, box-shadow .18s;
   }
-  .drop:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--line-strong)); }
+  .drop:hover { border-color: var(--line-strong); background: var(--surface-2); }
   .drop:active { transform: scale(.995); }
   .drop.over {
-    border-color: var(--primary);
-    background: var(--primary-soft);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 10%, transparent), var(--shadow-lift);
+    border-color: var(--text);
+    background: var(--surface-2);
+    box-shadow: none;
   }
   .drop-icon {
     width: 54px; height: 54px;
     display: grid; place-items: center;
-    border-radius: 17px;
-    background: linear-gradient(150deg, var(--primary-soft), color-mix(in srgb, var(--primary-2) 12%, transparent));
-    color: var(--primary);
+    border-radius: 12px;
+    background: var(--surface-2);
+    color: var(--text-2);
     margin-bottom: 9px;
     transition: transform .2s;
   }
@@ -206,7 +186,7 @@
     font-size: 13.5px;
     font-weight: 600;
     padding: 10px 17px;
-    border-radius: 12px;
+    border-radius: 9px;
     cursor: pointer;
     transition: .16s ease;
     display: inline-flex;
@@ -219,12 +199,15 @@
   .btn:disabled { opacity: .45; cursor: not-allowed; }
 
   .btn.primary {
-    background: linear-gradient(140deg, var(--primary), var(--primary-2));
-    border: none;
-    color: var(--primary-ink);
-    box-shadow: 0 1px 2px rgba(91, 91, 214, .35), 0 10px 22px -12px rgba(91, 91, 214, .7);
+    background: var(--text);
+    border: 1px solid var(--text);
+    color: var(--bg);
+    box-shadow: none;
   }
-  .btn.primary:hover:not(:disabled) { filter: brightness(1.06); }
+  .btn.primary:hover:not(:disabled) {
+    background: var(--text-2);
+    border-color: var(--text-2);
+  }
 
   .btn.quiet {
     border-color: transparent;
@@ -329,9 +312,7 @@
   .spin {
     display: inline-block;
     width: 12px; height: 12px;
-    border: 2px solid rgba(120, 130, 150, .28);
-    border-top-color: var(--primary);
-    border-color: color-mix(in srgb, var(--primary) 25%, transparent);
+    border: 2px solid var(--line-strong);
     border-top-color: var(--primary);
     border-radius: 50%;
     animation: rot .7s linear infinite;
@@ -358,10 +339,9 @@
   .dock-inner { max-width: 680px; margin: 0 auto; }
 
   .bar {
-    height: 4px;
+    height: 3px;
     border-radius: 99px;
-    background: rgba(120, 130, 150, .16);
-    background: color-mix(in srgb, var(--text) 9%, transparent);
+    background: var(--line);
     overflow: hidden;
     margin-bottom: 11px;
     opacity: 0;
@@ -373,7 +353,7 @@
     height: 100%;
     width: 0%;
     border-radius: 99px;
-    background: linear-gradient(90deg, var(--primary), var(--primary-2));
+    background: var(--primary);
     transition: width .22s ease;
   }
 
@@ -396,7 +376,7 @@
     min-width: 132px;
     height: 46px;
     font-size: 14.5px;
-    border-radius: 13px;
+    border-radius: 10px;
   }
 
   /* ============================================================
