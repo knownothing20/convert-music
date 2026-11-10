@@ -109,38 +109,38 @@
      ============================================================ */
   header { margin-bottom: 22px; }
 
-  /* 顶部标注：去掉彩色胶囊，只留一个小圆点 + 灰字 */
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 12px;
-    font-weight: 500;
-    letter-spacing: .02em;
-    color: var(--text-3);
-    background: none;
-    padding: 0;
-    margin-bottom: 14px;
-  }
-  .eyebrow .dot {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: var(--primary);
-  }
+  /* 顶部标注已移除：工具页不需要自我说明 */
 
   h1 {
     margin: 0 0 12px;
-    font-size: 33px;
-    line-height: 1.16;
-    letter-spacing: -1px;
+    font-size: 40px;
+    line-height: 1.08;
+    letter-spacing: -1.6px;
     font-weight: 700;
-  }
-  h1 em {
-    font-style: normal;
-    color: var(--primary);
     background: var(--grad);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+  }
+
+  /* 格式支持：用等宽字，像一行参数而不是一段文案 */
+  .formats {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 500 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: .05em;
+    color: var(--text-3);
+  }
+  .formats b {
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+  }
+  .formats .arr {
+    color: var(--primary);
+    opacity: .75;
   }
   .lede {
     margin: 0;
@@ -442,21 +442,19 @@
   /* ============================================================
      空状态 / 说明
      ============================================================ */
-  .notes {
-    margin-top: 26px;
-    padding: 0 4px;
+  .foot {
+    margin-top: 30px;
+    text-align: center;
+    font-size: 11.5px;
   }
-  .note {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    font-size: 12.5px;
+  .foot a {
     color: var(--text-3);
-    line-height: 1.65;
-    margin-bottom: 9px;
+    opacity: .72;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: opacity .2s, border-bottom-color .2s;
   }
-  .note svg { flex: none; margin-top: 3px; opacity: .8; }
-  .note b { color: var(--text-2); font-weight: 600; }
+  .foot a:hover { opacity: 1; border-bottom-color: var(--line-strong); }
 
   .hidden { display: none !important; }
 
@@ -472,10 +470,9 @@
      否则会锁死 transform，导致 hover/active 失效 */
   header > * { animation: fadeUp .62s cubic-bezier(.2, .7, .3, 1) backwards; }
   header > *:nth-child(1) { animation-delay: .04s; }
-  header > *:nth-child(2) { animation-delay: .10s; }
-  header > *:nth-child(3) { animation-delay: .17s; }
-  .drop { animation: fadeUp .62s cubic-bezier(.2, .7, .3, 1) .24s backwards; }
-  .notes { animation: fadeUp .62s cubic-bezier(.2, .7, .3, 1) .32s backwards; }
+  header > *:nth-child(2) { animation-delay: .11s; }
+  .drop { animation: fadeUp .62s cubic-bezier(.2, .7, .3, 1) .19s backwards; }
+  .foot { animation: fadeUp .62s cubic-bezier(.2, .7, .3, 1) .28s backwards; }
 
   /* 背景柔光极缓慢漂移，让画面保持“活着” */
   @keyframes drift {
@@ -520,7 +517,7 @@
   }
 
   @media (max-width: 420px) {
-    h1 { font-size: 25px; }
+    h1 { font-size: 35px; letter-spacing: -1.2px; }
     .app { padding-left: 15px; padding-right: 15px; }
     .dock { padding-left: 15px; padding-right: 15px; }
   }
@@ -534,9 +531,8 @@
 
 <div class="app">
   <header>
-    <span class="eyebrow"><span class="dot"></span>本地处理 · 不上传</span>
-    <h1>把 .ncm 变成<br /><em>能播的音频</em></h1>
-    <p class="lede">自动识别原始格式，是 FLAC 就还原 FLAC，是 MP3 就还原 MP3，零转码、零损失。</p>
+    <h1>音频转换</h1>
+    <p class="formats"><b>ncm</b><span class="arr">→</span>原始格式</p>
   </header>
 
   <div class="drop" id="drop">
@@ -565,16 +561,7 @@
     <div class="rows" id="rows"></div>
   </section>
 
-  <div class="notes">
-    <div class="note">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.3"/><path d="M8 7.2v4M8 5.2v.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      <span><b>为什么不做「统一转 MP3」</b>：FLAC 压成 MP3 属于二次有损压缩，音质只会更差。所以这里只还原，不转码。</span>
-    </div>
-    <div class="note">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.3"/><path d="M8 7.2v4M8 5.2v.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      <span>全部运算在浏览器内完成，文件不会上传到任何服务器。多格式支持请看 <a href="classic/" style="color:var(--primary)">经典版</a>。</span>
-    </div>
-  </div>
+  <footer class="foot"><a href="classic/">经典版</a></footer>
 </div>
 
 <div class="dock hide" id="dock">
