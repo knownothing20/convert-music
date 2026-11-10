@@ -629,6 +629,40 @@
   }
   .switch:checked::after { transform: translateX(17px); }
 
+  /* 首页的常用目录快捷入口 */
+  .quick-dirs {
+    margin-top: 16px;
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .quick-dir {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, .055);
+    color: var(--text-2);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: .16s ease;
+    text-align: left;
+  }
+  .quick-dir:hover:not(:disabled) {
+    border-color: var(--line-strong);
+    color: var(--text);
+    background: rgba(255, 255, 255, .1);
+  }
+  .quick-dir:disabled { opacity: .6; cursor: default; }
+  .quick-dir .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .quick-dir .a { flex: none; font-size: 12px; color: var(--primary); opacity: .9; }
+
   /* ============================================================
      常用目录（桌面 Chrome / Edge 才具备 FSA 能力）
      ============================================================ */
@@ -777,12 +811,13 @@
         <path d="M4 15.2v3.1A1.7 1.7 0 0 0 5.7 20h12.6a1.7 1.7 0 0 0 1.7-1.7v-3.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
     </div>
-    <div class="drop-title">拖入文件，或点这里选择</div>
-    <div class="drop-hint">支持批量；桌面端可直接拖文件夹</div>
-    <div class="drop-cta">
+    <div class="drop-title" id="dropTitle">拖入文件，或点这里选择</div>
+    <div class="drop-hint" id="dropHint">支持批量；桌面端可直接拖文件夹</div>
+    <div class="drop-cta" id="dropCta">
       <button class="btn primary" id="pickFiles" type="button">选择文件</button>
       <button class="btn" id="pickDir" type="button">选择文件夹</button>
     </div>
+    <div class="quick-dirs hidden" id="quickDirs"></div>
   </div>
 
   <input type="file" id="fileInput" accept=".ncm,.kwm,.kgm,.kgma,.mg3d,.xm,.x2m,.x3m,.qmc0,.qmc2,.qmc3,.qmc4,.qmc6,.qmc8,.qmcflac,.qmcogg,.mflac,.mflac0,.mgg,.mgg0,.mgg1,.mggl,.tkm" multiple hidden />
@@ -3805,9 +3840,108 @@ const Zip = (() => {
 
   let dirEntries = [];
 
+  /* ---- 首页入口：按环境自适应 ---- */
+  const IS_TOUCH = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+
+  function canPickDir() {
+    return !!(NATIVE || window.showDirectoryPicker);
+  }
+
+  function applyDropEnv() {
+    const title = $("dropTitle");
+    const hint = $("dropHint");
+    const dirBtn = $("pickDir");
+    const hasDirs = !!(dirEntries && dirEntries.length);
+
+    if (hasDirs) {
+      title.textContent = "从常用目录扫描";
+      hint.textContent = "点一下读取整个文件夹，也可以手动选择";
+    } else if (NATIVE || IS_TOUCH) {
+      title.textContent = "选择音乐文件";
+      hint.textContent = "支持一次选择多个";
+    } else {
+      title.textContent = "拖入文件，或点这里选择";
+      hint.textContent = "支持批量；也可以直接拖文件夹";
+    }
+
+    // 手机上没有「选择文件夹」这个概念，改用常用目录
+    if (dirBtn && (NATIVE || IS_TOUCH)) dirBtn.classList.add("hidden");
+  }
+
+  function renderQuickDirs() {
+    const box = $("quickDirs");
+    if (!box) return;
+
+    const list = dirEntries || [];
+
+    if (!list.length) {
+      if (!canPickDir()) {
+        box.classList.add("hidden");
+        box.innerHTML = "";
+        return;
+      }
+      box.classList.remove("hidden");
+      box.innerHTML =
+        '<button class="quick-dir" id="quickAddDir" type="button">' +
+        '<span class="n">添加音乐目录</span><span class="a">+</span></button>';
+      const b = $("quickAddDir");
+      if (b) {
+        b.addEventListener("click", async () => {
+          b.disabled = true;
+          try {
+            await DirAPI.add();
+            await refreshDirs();
+          } catch (e) {
+            b.disabled = false;
+          }
+        });
+      }
+      return;
+    }
+
+    box.classList.remove("hidden");
+    box.innerHTML = list.map((_, i) =>
+      '<button class="quick-dir" data-qscan="' + i + '" type="button">' +
+      '<span class="n"></span><span class="a">扫描 →</span></button>'
+    ).join("");
+
+    box.querySelectorAll("[data-qscan]").forEach((b) => {
+      const i = +b.dataset.qscan;
+      b.querySelector(".n").textContent = list[i].name; // 用 textContent，避免目录名注入
+      const label = b.querySelector(".a");
+
+      b.addEventListener("click", async () => {
+        const entry = list[i];
+        if (!entry) return;
+        b.disabled = true;
+        label.textContent = "扫描中";
+        try {
+          const files = await DirAPI.scan(entry.id);
+          b.disabled = false;
+          if (!files.length) {
+            label.textContent = "没有可转换文件";
+            setTimeout(() => { label.textContent = "扫描 →"; }, 1800);
+          } else {
+            label.textContent = "扫描 →";
+            addFiles(files);
+          }
+        } catch (e) {
+          b.disabled = false;
+          label.textContent = "失败";
+          setTimeout(() => { label.textContent = "扫描 →"; }, 1800);
+        }
+      });
+    });
+  }
+
   async function refreshDirs() {
     const box = $("dirsBox");
-    if (!DirAPI) { box.classList.add("hidden"); return; }
+    if (!DirAPI) {
+      box.classList.add("hidden");
+      // 没有目录能力时也要按环境调整文案，否则手机端仍显示「拖入」
+      applyDropEnv();
+      return;
+    }
     box.classList.remove("hidden");
     try {
       dirEntries = await DirAPI.list();
@@ -3815,6 +3949,8 @@ const Zip = (() => {
       dirEntries = [];
     }
     renderDirs();
+    renderQuickDirs();
+    applyDropEnv();
   }
 
   function renderDirs() {
@@ -3841,7 +3977,7 @@ const Zip = (() => {
           b.disabled = false;
           b.textContent = "扫描";
           if (!files.length) {
-            b.textContent = "无 ncm";
+            b.textContent = "没有可转换文件";
             setTimeout(() => { b.textContent = "扫描"; }, 1500);
           } else {
             addFiles(files);
