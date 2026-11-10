@@ -23,6 +23,12 @@ class DirManager(private val ctx: Context) {
     private val prefs = ctx.getSharedPreferences("dirs", Context.MODE_PRIVATE)
     val scanDir: File = File(ctx.filesDir, "scan").apply { mkdirs() }
 
+    private companion object {
+        // 与网页端 SUPPORTED_RE 保持一致
+        val SUPPORTED_EXT =
+            Regex("""\.(ncm|kwm|qmc\d*|qmcflac|qmcogg|mflac\d*|mgg\d*|mggl|tkm)$""")
+    }
+
     private fun raw(): JSONArray = try {
         JSONArray(prefs.getString("list", "[]") ?: "[]")
     } catch (e: Exception) {
@@ -109,7 +115,7 @@ class DirManager(private val ctx: Context) {
                 if (out.length() >= limit) return
                 if (f.isDirectory) { walk(f, depth + 1); continue }
                 val n = f.name ?: continue
-                if (!n.lowercase().endsWith(".ncm")) continue
+                if (!SUPPORTED_EXT.containsMatchIn(n.lowercase())) continue
 
                 val dest = File(scanDir, UUID.randomUUID().toString().take(8) + ".ncm")
                 val ok = try {

@@ -782,7 +782,7 @@
     </div>
   </div>
 
-  <input type="file" id="fileInput" accept=".ncm" multiple hidden />
+  <input type="file" id="fileInput" accept=".ncm,.kwm,.qmc0,.qmc2,.qmc3,.qmc4,.qmc6,.qmc8,.qmcflac,.qmcogg,.mflac,.mflac0,.mgg,.mgg0,.mgg1,.mggl,.tkm" multiple hidden />
   <input type="file" id="dirInput" webkitdirectory directory multiple hidden />
 
   <section class="panel hidden" id="panel">
@@ -793,7 +793,7 @@
     <div class="rows" id="rows"></div>
   </section>
 
-  <p class="formats"><b>ncm</b><span class="arr">→</span>原始格式</p>
+  <p class="formats"><b>ncm · qmc · kwm</b><span class="arr">→</span>原始格式</p>
 </div>
 
 <!-- 设置面板 -->
@@ -979,6 +979,20 @@ const AES = (() => {
 /* ============================================================
    2. NCM 容器解析（结构与算法已用真实格式样本逐字节验证）
    ============================================================ */
+/* ---- 公共：按文件头判断音频格式 ---- */
+function sniffAudio(b) {
+  if (!b || b.length < 4) return null;
+  if (b[0] === 0x66 && b[1] === 0x4c && b[2] === 0x61 && b[3] === 0x43) return "flac";
+  if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return "mp3";
+  if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return "mp3";
+  if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "ogg";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return "wav";
+  if (b[0] === 0x30 && b[1] === 0x26 && b[2] === 0xb2 && b[3] === 0x75) return "wma";
+  if (b[0] === 0x66 && b[1] === 0x74 && b[2] === 0x79 && b[3] === 0x70) return "m4a";
+  if (b[0] === 0x4d && b[1] === 0x41 && b[2] === 0x43 && b[3] === 0x20) return "ape";
+  return null;
+}
+
 const NCM = (() => {
   const CORE_KEY = hexToBytes("687A4852416D736F356B496E62617857");
   const META_KEY = hexToBytes("2331346C6A6B5F215C5D2630553C2728");
@@ -1009,18 +1023,6 @@ const NCM = (() => {
     const out = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
-  }
-  function sniff(b) {
-    if (!b || b.length < 4) return null;
-    if (b[0] === 0x66 && b[1] === 0x4c && b[2] === 0x61 && b[3] === 0x43) return "flac";
-    if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return "mp3";
-    if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return "mp3";
-    if (b[0] === 0x4f && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "ogg";
-    if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46) return "wav";
-    if (b[0] === 0x30 && b[1] === 0x26 && b[2] === 0xb2 && b[3] === 0x75) return "wma";
-    if (b[0] === 0x66 && b[1] === 0x74 && b[2] === 0x79 && b[3] === 0x70) return "m4a";
-    if (b[0] === 0x4d && b[1] === 0x41 && b[2] === 0x43 && b[3] === 0x20) return "ape";
-    return null;
   }
   function keyBox(key) {
     const box = new Uint8Array(256);
@@ -1121,12 +1123,406 @@ const NCM = (() => {
       await new Promise((r) => setTimeout(r, 0));
     }
 
-    let format = sniff(out.subarray(0, 4)) || (meta && String(meta.format || "").toLowerCase()) || "bin";
+    let format = sniffAudio(out.subarray(0, 4)) || (meta && String(meta.format || "").toLowerCase()) || "bin";
     return { format, data: out, meta, cover };
   }
 
   return { decode };
 })();
+
+/* ------------------------------------------------------------
+   酷我 kwm
+   头部 0x400 之前是容器信息，之后为音频数据，
+   用 32 字节掩码循环异或还原。
+   ------------------------------------------------------------ */
+const KWM = (() => {
+  //prettier-ignore
+  const MAGIC1 = [0x79,0x65,0x65,0x6C,0x69,0x6F,0x6E,0x2D,0x6B,0x75,0x77,0x6F,0x2D,0x74,0x6D,0x65];
+  //prettier-ignore
+  const MAGIC2 = [0x79,0x65,0x65,0x6C,0x69,0x6F,0x6E,0x2D,0x6B,0x75,0x77,0x6F,0x00,0x00,0x00,0x00];
+  const PRE = "MoOtOiTvINGwd2E6n0E1i7L5t2IoOoNk";
+
+  function hasPrefix(u8, p) {
+    if (u8.length < p.length) return false;
+    for (let i = 0; i < p.length; i++) if (u8[i] !== p[i]) return false;
+    return true;
+  }
+
+  function trimKey(raw) {
+    const n = raw.length;
+    if (n > 32) return raw.slice(0, 32);
+    if (n < 32) return raw.padEnd(32, raw);
+    return raw;
+  }
+
+  function createMask(keyBytes) {
+    const dv = new DataView(keyBytes.buffer, keyBytes.byteOffset, 8);
+    const keyStr = trimKey(dv.getBigUint64(0, true).toString());
+    const mask = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) mask[i] = PRE.charCodeAt(i) ^ keyStr.charCodeAt(i);
+    return mask;
+  }
+
+  function decode(arrayBuffer) {
+    const u8 = new Uint8Array(arrayBuffer);
+    if (!hasPrefix(u8, MAGIC1) && !hasPrefix(u8, MAGIC2)) {
+      throw new Error("不是有效的 kwm 文件（文件头不匹配）");
+    }
+    if (u8.length <= 0x400) throw new Error("文件不完整");
+
+    const mask = createMask(u8.slice(0x18, 0x20));
+    const audio = u8.slice(0x400);
+    for (let i = 0; i < audio.length; i++) audio[i] ^= mask[i & 0x1f];
+
+    const format = sniffAudio(audio.subarray(0, 4)) || "mp3";
+    return { format, data: audio, meta: null, cover: null };
+  }
+
+  return { decode, hasPrefix, trimKey, createMask };
+})();
+
+/* ------------------------------------------------------------
+   QQ 音乐 QMC 系列（qmc0/2/3/4/6/8、qmcflac、qmcogg、mflac、mgg、tkm）
+   密钥从文件尾部提取，经 TEA 派生后选择 Static / Map / RC4 三种流密码之一
+   ------------------------------------------------------------ */
+const QMC = (() => {
+  const SALT_LEN = 2;
+  const ZERO_LEN = 7;
+  const BYTE_COMMA = 0x2c;
+  const TEA_DELTA = 0x9e3779b9;
+  const td = new TextDecoder();
+
+  function b64(str) {
+    const clean = String(str).replace(/[^A-Za-z0-9+/=]/g, "");
+    const bin = atob(clean);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /* ---- TEA ---- */
+  function teaKey(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, 16);
+    return {
+      k0: dv.getUint32(0, false),
+      k1: dv.getUint32(4, false),
+      k2: dv.getUint32(8, false),
+      k3: dv.getUint32(12, false),
+    };
+  }
+
+  function teaDecrypt(dst, src, k, rounds) {
+    let v0 = src.getUint32(0, false);
+    let v1 = src.getUint32(4, false);
+    let sum = (TEA_DELTA * rounds) / 2;
+    for (let i = 0; i < rounds / 2; i++) {
+      v1 -= ((v0 << 4) + k.k2) ^ (v0 + sum) ^ ((v0 >>> 5) + k.k3);
+      v0 -= ((v1 << 4) + k.k0) ^ (v1 + sum) ^ ((v1 >>> 5) + k.k1);
+      sum -= TEA_DELTA;
+    }
+    dst.setUint32(0, v0, false);
+    dst.setUint32(4, v1, false);
+  }
+
+  function simpleMakeKey(salt, len) {
+    const out = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      out[i] = (Math.abs(Math.tan(salt + i * 0.1)) * 100.0) & 0xff;
+    }
+    return out;
+  }
+
+  function decryptTencentTea(inBuf, keyBytes) {
+    if (inBuf.length % 8 !== 0) throw new Error("QMC 密钥块长度异常");
+    if (inBuf.length < 16) throw new Error("QMC 密钥块过短");
+
+    const k = teaKey(keyBytes);
+    const rounds = 32;
+    const tmpBuf = new Uint8Array(8);
+    const tmpView = new DataView(tmpBuf.buffer);
+
+    teaDecrypt(tmpView, new DataView(inBuf.buffer, inBuf.byteOffset, 8), k, rounds);
+
+    const nPadLen = tmpBuf[0] & 0x7;
+    const outLen = inBuf.length - 1 - nPadLen - SALT_LEN - ZERO_LEN;
+    const outBuf = new Uint8Array(outLen);
+
+    let ivPrev = new Uint8Array(8);
+    let ivCur = inBuf.slice(0, 8);
+    let inBufPos = 8;
+    let tmpIdx = 1 + nPadLen;
+
+    const cryptBlock = () => {
+      ivPrev = ivCur;
+      ivCur = inBuf.slice(inBufPos, inBufPos + 8);
+      for (let j = 0; j < 8; j++) tmpBuf[j] ^= ivCur[j];
+      teaDecrypt(tmpView, tmpView, k, rounds);
+      inBufPos += 8;
+      tmpIdx = 0;
+    };
+
+    for (let i = 1; i <= SALT_LEN; ) {
+      if (tmpIdx < 8) { tmpIdx++; i++; } else cryptBlock();
+    }
+
+    let outBufPos = 0;
+    while (outBufPos < outLen) {
+      if (tmpIdx < 8) {
+        outBuf[outBufPos] = tmpBuf[tmpIdx] ^ ivPrev[tmpIdx];
+        outBufPos++;
+        tmpIdx++;
+      } else {
+        cryptBlock();
+      }
+    }
+
+    for (let i = 1; i <= ZERO_LEN; i++) {
+      if (tmpBuf[tmpIdx] !== ivPrev[tmpIdx]) throw new Error("QMC 密钥校验失败");
+    }
+    return outBuf;
+  }
+
+  //prettier-ignore
+  const mixKey1 = new Uint8Array([0x33,0x38,0x36,0x5A,0x4A,0x59,0x21,0x40,0x23,0x2A,0x24,0x25,0x5E,0x26,0x29,0x28]);
+  //prettier-ignore
+  const mixKey2 = new Uint8Array([0x2A,0x2A,0x23,0x21,0x28,0x23,0x24,0x25,0x26,0x5E,0x61,0x31,0x63,0x5A,0x2C,0x54]);
+
+  function decryptV2Key(key) {
+    if (key.length < 18 || td.decode(key.slice(0, 18)) !== "QQMusic EncV2,Key:") return key;
+    let out = decryptTencentTea(key.slice(18), mixKey1);
+    out = decryptTencentTea(out, mixKey2);
+    const dec = b64(td.decode(out));
+    if (dec.length < 16) throw new Error("QMC EncV2 密钥解码失败");
+    return dec;
+  }
+
+  function deriveKey(raw) {
+    let key = b64(td.decode(raw));
+    if (key.length < 16) throw new Error("QMC 密钥过短");
+    key = decryptV2Key(key);
+    const simple = simpleMakeKey(106, 8);
+    const teaKeyBytes = new Uint8Array(16);
+    for (let i = 0; i < 8; i++) {
+      teaKeyBytes[i << 1] = simple[i];
+      teaKeyBytes[(i << 1) + 1] = key[i];
+    }
+    const sub = decryptTencentTea(key.subarray(8), teaKeyBytes);
+    key.set(sub, 8);
+    return key.subarray(0, 8 + sub.length);
+  }
+
+  /* ---- 三种流密码 ---- */
+  //prettier-ignore
+  const STATIC_BOX = new Uint8Array([
+    0x77,0x48,0x32,0x73,0xDE,0xF2,0xC0,0xC8, 0x95,0xEC,0x30,0xB2,0x51,0xC3,0xE1,0xA0,
+    0x9E,0xE6,0x9D,0xCF,0xFA,0x7F,0x14,0xD1, 0xCE,0xB8,0xDC,0xC3,0x4A,0x67,0x93,0xD6,
+    0x28,0xC2,0x91,0x70,0xCA,0x8D,0xA2,0xA4, 0xF0,0x08,0x61,0x90,0x7E,0x6F,0xA2,0xE0,
+    0xEB,0xAE,0x3E,0xB6,0x67,0xC7,0x92,0xF4, 0x91,0xB5,0xF6,0x6C,0x5E,0x84,0x40,0xF7,
+    0xF3,0x1B,0x02,0x7F,0xD5,0xAB,0x41,0x89, 0x28,0xF4,0x25,0xCC,0x52,0x11,0xAD,0x43,
+    0x68,0xA6,0x41,0x8B,0x84,0xB5,0xFF,0x2C, 0x92,0x4A,0x26,0xD8,0x47,0x6A,0x7C,0x95,
+    0x61,0xCC,0xE6,0xCB,0xBB,0x3F,0x47,0x58, 0x89,0x75,0xC3,0x75,0xA1,0xD9,0xAF,0xCC,
+    0x08,0x73,0x17,0xDC,0xAA,0x9A,0xA2,0x16, 0x41,0xD8,0xA2,0x06,0xC6,0x8B,0xFC,0x66,
+    0x34,0x9F,0xCF,0x18,0x23,0xA0,0x0A,0x74, 0xE7,0x2B,0x27,0x70,0x92,0xE9,0xAF,0x37,
+    0xE6,0x8C,0xA7,0xBC,0x62,0x65,0x9C,0xC2, 0x08,0xC9,0x88,0xB3,0xF3,0x43,0xAC,0x74,
+    0x2C,0x0F,0xD4,0xAF,0xA1,0xC3,0x01,0x64, 0x95,0x4E,0x48,0x9F,0xF4,0x35,0x78,0x95,
+    0x7A,0x39,0xD6,0x6A,0xA0,0x6D,0x40,0xE8, 0x4F,0xA8,0xEF,0x11,0x1D,0xF3,0x1B,0x3F,
+    0x3F,0x07,0xDD,0x6F,0x5B,0x19,0x30,0x19, 0xFB,0xEF,0x0E,0x37,0xF0,0x0E,0xCD,0x16,
+    0x49,0xFE,0x53,0x47,0x13,0x1A,0xBD,0xA4, 0xF1,0x40,0x19,0x60,0x0E,0xED,0x68,0x09,
+    0x06,0x5F,0x4D,0xCF,0x3D,0x1A,0xFE,0x20, 0x77,0xE4,0xD9,0xDA,0xF9,0xA4,0x2B,0x76,
+    0x1C,0x71,0xDB,0x00,0xBC,0xFD,0x0C,0x6C, 0xA5,0x47,0xF7,0xF6,0x00,0x79,0x4A,0x11,
+  ]);
+
+  function rotate(value, bits) {
+    const r = (bits + 4) % 8;
+    return ((value << r) | (value >> r)) & 0xff;
+  }
+
+  function makeStaticCipher() {
+    return {
+      decrypt(buf) {
+        for (let i = 0; i < buf.length; i++) {
+          let off = i;
+          if (off > 0x7fff) off %= 0x7fff;
+          buf[i] ^= STATIC_BOX[(off * off + 27) & 0xff];
+        }
+      },
+    };
+  }
+
+  function makeMapCipher(key) {
+    const n = key.length;
+    if (!n) throw new Error("QMC map cipher 密钥为空");
+    return {
+      decrypt(buf) {
+        for (let i = 0; i < buf.length; i++) {
+          let off = i;
+          if (off > 0x7fff) off %= 0x7fff;
+          const idx = (off * off + 71214) % n;
+          buf[i] ^= rotate(key[idx], idx & 0x7);
+        }
+      },
+    };
+  }
+
+  const FIRST_SEG = 0x80;
+  const SEG = 5120;
+
+  function makeRC4Cipher(key) {
+    const N = key.length;
+    if (!N) throw new Error("QMC rc4 cipher 密钥为空");
+
+    const S0 = new Uint8Array(N);
+    for (let i = 0; i < N; i++) S0[i] = i & 0xff;
+    let j = 0;
+    for (let i = 0; i < N; i++) {
+      j = (S0[i] + j + key[i % N]) % N;
+      const t = S0[i];
+      S0[i] = S0[j];
+      S0[j] = t;
+    }
+
+    let hash = 1;
+    for (let i = 0; i < N; i++) {
+      const value = key[i];
+      if (!value) continue;
+      const next = (hash * value) >>> 0;
+      if (next === 0 || next <= hash) break;
+      hash = next;
+    }
+
+    function segmentKey(id) {
+      const seed = key[id % N];
+      const idx = Math.floor((hash / ((id + 1) * seed)) * 100.0);
+      return idx % N;
+    }
+
+    function encFirst(buf, offset) {
+      for (let i = 0; i < buf.length; i++) {
+        buf[i] ^= key[segmentKey(offset + i)];
+      }
+    }
+
+    function encSeg(buf, offset) {
+      const S = S0.slice(0);
+      const skipLen = (offset % SEG) + segmentKey(Math.floor(offset / SEG));
+      let jj = 0;
+      let k = 0;
+      for (let i = -skipLen; i < buf.length; i++) {
+        jj = (jj + 1) % N;
+        k = (S[jj] + k) % N;
+        const t = S[k];
+        S[k] = S[jj];
+        S[jj] = t;
+        if (i >= 0) buf[i] ^= S[(S[jj] + S[k]) % N];
+      }
+    }
+
+    return {
+      decrypt(buf) {
+        let toProcess = buf.length;
+        let processed = 0;
+        let offset = 0;
+
+        const post = (len) => {
+          toProcess -= len;
+          processed += len;
+          offset += len;
+          return toProcess === 0;
+        };
+
+        if (offset < FIRST_SEG) {
+          const len = Math.min(buf.length, FIRST_SEG - offset);
+          encFirst(buf.subarray(0, len), offset);
+          if (post(len)) return;
+        }
+
+        if (offset % SEG !== 0) {
+          const len = Math.min(SEG - (offset % SEG), toProcess);
+          encSeg(buf.subarray(processed, processed + len), offset);
+          if (post(len)) return;
+        }
+
+        while (toProcess > SEG) {
+          encSeg(buf.subarray(processed, processed + SEG), offset);
+          post(SEG);
+        }
+
+        if (toProcess > 0) {
+          encSeg(buf.subarray(processed), offset);
+        }
+      },
+    };
+  }
+
+  /* ---- 从文件尾部取密钥并解密 ---- */
+  function decode(arrayBuffer) {
+    const file = new Uint8Array(arrayBuffer);
+    const size = file.length;
+    if (size < 16) throw new Error("文件太小");
+
+    let audioSize = size;
+    let cipher = null;
+
+    const last4 = file.slice(-4);
+    const tag = td.decode(last4);
+
+    if (tag === "STag") {
+      throw new Error("文件里没有写入密钥（STag），无法解锁");
+    } else if (tag === "QTag") {
+      const sizeBuf = file.slice(-8, -4);
+      const keySize = new DataView(sizeBuf.buffer, sizeBuf.byteOffset).getUint32(0, false);
+      audioSize = size - keySize - 8;
+
+      const rawKey = file.subarray(audioSize, size - 8);
+      const keyEnd = rawKey.indexOf(BYTE_COMMA);
+      if (keyEnd < 0) throw new Error("QMC 密钥提取失败");
+      const key = deriveKey(rawKey.subarray(0, keyEnd));
+      cipher = key.length > 300 ? makeRC4Cipher(key) : makeMapCipher(key);
+    } else {
+      const keySize = new DataView(last4.buffer, last4.byteOffset).getUint32(0, true);
+      if (keySize < 0x400) {
+        audioSize = size - keySize - 4;
+        const rawKey = file.subarray(audioSize, size - 4);
+        const key = deriveKey(rawKey);
+        cipher = key.length > 300 ? makeRC4Cipher(key) : makeMapCipher(key);
+      } else {
+        audioSize = size;
+        cipher = makeStaticCipher();
+      }
+    }
+
+    if (!cipher) throw new Error("没有找到可用的 QMC 解密器");
+    if (!audioSize || audioSize <= 0) throw new Error("QMC 音频长度异常");
+
+    const audio = file.slice(0, audioSize);
+    cipher.decrypt(audio);
+
+    const format = sniffAudio(audio.subarray(0, 4)) || "mp3";
+    return { format, data: audio, meta: null, cover: null };
+  }
+
+  return { decode };
+})();
+
+/* ------------------------------------------------------------
+   按扩展名分发到对应的解密器
+   ------------------------------------------------------------ */
+const SUPPORTED_RE = /\.(ncm|kwm|qmc0|qmc2|qmc3|qmc4|qmc6|qmc8|qmcflac|qmcogg|mflac0?|mgg0?|mgg1|mggl|tkm)$/i;
+
+async function decodeAny(buf, name, onProgress) {
+  const ext = String(name).split(".").pop().toLowerCase();
+
+  if (ext === "ncm") return await NCM.decode(buf, onProgress);
+  if (ext === "kwm") return KWM.decode(buf);
+  if (/^(qmc\d*|qmcflac|qmcogg|mflac\d*|mgg\d*|mggl|tkm)$/.test(ext)) return QMC.decode(buf);
+
+  // 扩展名不认识时，用文件头兜底判断
+  const head = new Uint8Array(buf, 0, Math.min(32, buf.byteLength));
+  if (String.fromCharCode.apply(null, head.subarray(0, 8)) === "CTENFDAM") {
+    return await NCM.decode(buf, onProgress);
+  }
+  throw new Error("暂不支持 ." + ext + " 格式");
+}
 
 /* ============================================================
    3. ZIP 打包（store 模式，音频已压缩，无需二次压缩）
@@ -1431,7 +1827,7 @@ const Zip = (() => {
     const accepted = [];
     let skipped = 0;
     for (const f of list) {
-      if (!/\.ncm$/i.test(f.name)) { skipped++; continue; }
+      if (!SUPPORTED_RE.test(f.name)) { skipped++; continue; }
       if (items.some((i) => i.name === f.name && i.size === f.size)) { skipped++; continue; }
       accepted.push(f);
     }
@@ -1453,7 +1849,7 @@ const Zip = (() => {
     for (const e of entries) {
       if (e.isFile) {
         const f = await new Promise((res, rej) => e.file(res, rej));
-        if (/\.ncm$/i.test(f.name)) out.push(f);
+        if (SUPPORTED_RE.test(f.name)) out.push(f);
       } else if (e.isDirectory) {
         const r = e.createReader();
         let batch;
@@ -1530,7 +1926,7 @@ const Zip = (() => {
         const buf = typeof it.file.arrayBuffer === "function"
           ? await it.file.arrayBuffer()
           : await it.file.load();
-        const res = await NCM.decode(buf, (p) => {
+        const res = await decodeAny(buf, it.name, (p) => {
           it.progress = p;
           setBar((n + p) / queue.length);
           if (Math.round(p * 100) % 4 === 0) render();
@@ -1873,7 +2269,7 @@ const Zip = (() => {
               if (files.length >= MAX) return;
               if (h.kind === "directory") {
                 await walk(h, depth + 1);
-              } else if (/\.ncm$/i.test(name)) {
+              } else if (SUPPORTED_RE.test(name)) {
                 try {
                   const f = await h.getFile();
                   files.push({ name: f.name, size: f.size, dirHandle: entry.handle, load: () => f.arrayBuffer() });
