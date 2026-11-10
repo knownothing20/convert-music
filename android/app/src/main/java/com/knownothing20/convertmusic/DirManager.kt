@@ -126,6 +126,8 @@ class DirManager(private val ctx: Context) {
                     put("name", n)
                     put("size", dest.length())
                     put("url", "https://appassets.androidplatform.net/scan/" + dest.name)
+                    // 记录源文件所在目录，便于转换后原地保存
+                    put("dir", dir.uri.toString())
                 })
             }
         }

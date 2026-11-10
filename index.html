@@ -1377,7 +1377,7 @@ const Zip = (() => {
       if (!b) return;
       const it = items.find((x) => x.id === +b.dataset.dl);
       if (it && it.data) {
-        download(new Blob([it.data], { type: "application/octet-stream" }), it.outName);
+        download(new Blob([it.data], { type: "application/octet-stream" }), it.outName, it);
       }
     });
   }
@@ -1399,6 +1399,7 @@ const Zip = (() => {
       items.push({
         id: ++uid, file: f, name: f.name, size: f.size,
         outName: "", format: "", state: "idle", progress: 0, err: "", data: null,
+        srcDir: f.srcDir || "", dirHandle: f.dirHandle || null,
       });
     }
     render();
@@ -1428,7 +1429,7 @@ const Zip = (() => {
     const doneList = items.filter((i) => i.state === "done" && i.data);
     if (!doneList.length) return false;
     if (doneList.length === 1) {
-      download(new Blob([doneList[0].data], { type: "application/octet-stream" }), doneList[0].outName);
+      download(new Blob([doneList[0].data], { type: "application/octet-stream" }), doneList[0].outName, doneList[0]);
     } else {
       const blob = Zip.build(doneList.map((i) => ({ name: i.outName, data: i.data })));
       download(blob, `音乐转换_${new Date().toISOString().slice(0, 10)}.zip`);
@@ -1520,8 +1521,8 @@ const Zip = (() => {
     const el = $("saveHint");
     if (!el) return;
     el.textContent = NATIVE
-      ? "保存到手机的「音乐 / 音乐转换」文件夹，原文件不会被改动。"
-      : "保存到浏览器的下载目录（通常是「下载」文件夹），原文件不会被改动。";
+      ? "从「常用目录」扫描的文件，转换后存回原目录；手动选的文件存到「音乐 / 音乐转换」。原文件不会被改动。"
+      : "从「常用目录」扫描的文件，转换后存回原目录（需授权写入）；手动选的文件存到浏览器下载目录。原文件不会被改动。";
   })();
 
   function bytesToBase64(bytes) {
@@ -1533,14 +1534,17 @@ const Zip = (() => {
     return btoa(binary);
   }
 
-  async function saveViaNative(blob, name) {
+  async function saveViaNative(blob, name, dirUri) {
     const CHUNK = 3 * 1024 * 1024;   // 分块传输，避免大文件在 JS 与原生之间构造巨型字符串
     const total = blob.size;
     let sent = 0;
 
-    if (!window.AndroidBridge.beginFile(name)) {
-      throw new Error("无法创建目标文件");
-    }
+    // 有源目录就写回源目录，否则进「音乐/音乐转换」
+    const canDir = dirUri && typeof window.AndroidBridge.beginFileInDir === "function";
+    const opened = canDir
+      ? window.AndroidBridge.beginFileInDir(dirUri, name)
+      : window.AndroidBridge.beginFile(name);
+    if (!opened) throw new Error("无法创建目标文件（可能没有该目录的写入权限）");
 
     while (sent < total) {
       const end = Math.min(sent + CHUNK, total);
@@ -1556,13 +1560,34 @@ const Zip = (() => {
     if (msg && msg.indexOf("ERR") === 0) throw new Error(msg.slice(3));
   }
 
-  function download(blob, name) {
+  async function download(blob, name, item) {
+    /* 1) 优先写回源目录（桌面 FSA） */
+    if (item && item.dirHandle) {
+      try {
+        const opt = { mode: "readwrite" };
+        let perm = await item.dirHandle.queryPermission(opt);
+        if (perm !== "granted") perm = await item.dirHandle.requestPermission(opt);
+        if (perm === "granted") {
+          const fh = await item.dirHandle.getFileHandle(name, { create: true });
+          const w = await fh.createWritable();
+          await w.write(blob);
+          await w.close();
+          dockTitle.textContent = "已保存到源目录";
+          dockSub.textContent = name;
+          return;
+        }
+      } catch (e) {
+        console.warn("写入源目录失败，回退到普通下载", e);
+      }
+    }
+
     if (NATIVE) {
-      dockTitle.textContent = "正在保存到本机";
-      saveViaNative(blob, name)
+      const toDir = !!(item && item.srcDir);
+      dockTitle.textContent = toDir ? "正在保存到源目录" : "正在保存到本机";
+      saveViaNative(blob, name, toDir ? item.srcDir : "")
         .then(() => {
-          dockTitle.textContent = "已保存";
-          dockSub.textContent = "文件在「音乐/音乐转换」文件夹";
+          dockTitle.textContent = toDir ? "已保存到源目录" : "已保存";
+          dockSub.textContent = toDir ? name : "文件在「音乐/音乐转换」文件夹";
         })
         .catch((e) => {
           dockTitle.textContent = "保存失败";
@@ -1629,6 +1654,7 @@ const Zip = (() => {
               resolve(arr.map((x) => ({
                 name: x.name,
                 size: x.size,
+                srcDir: x.dir || "",
                 load: () => fetch(x.url).then((r) => r.arrayBuffer()),
               })));
             });
@@ -1684,7 +1710,7 @@ const Zip = (() => {
               } else if (/\.ncm$/i.test(name)) {
                 try {
                   const f = await h.getFile();
-                  files.push({ name: f.name, size: f.size, load: () => f.arrayBuffer() });
+                  files.push({ name: f.name, size: f.size, dirHandle: entry.handle, load: () => f.arrayBuffer() });
                 } catch (e) { /* 跳过读不到的 */ }
               }
             }

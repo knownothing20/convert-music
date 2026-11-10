@@ -10,6 +10,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import android.util.Base64
 import android.view.KeyEvent
 import android.webkit.JavascriptInterface
@@ -120,7 +121,7 @@ class MainActivity : Activity() {
                 try {
                     contentResolver.takePersistableUriPermission(
                         uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
                 } catch (e: Exception) { /* 某些 provider 不支持持久化 */ }
 
@@ -174,6 +175,37 @@ class MainActivity : Activity() {
                 val os = resolver.openOutputStream(uri)
                 if (os == null) {
                     resolver.delete(uri, null, null)
+                    pendingUri = null
+                    return false
+                }
+                stream = os
+                true
+            } catch (e: Exception) {
+                discardPending()
+                false
+            }
+        }
+
+        /**
+         * 在指定目录下新建文件 —— 用于「源文件在哪就存哪」。
+         * dirUri 是扫描时记录的父目录 document URI，权限随 tree 授权继承。
+         */
+        @JavascriptInterface
+        fun beginFileInDir(dirUri: String, fileName: String): Boolean {
+            discardPending()
+            val safe = sanitize(fileName)
+            return try {
+                val uri = DocumentsContract.createDocument(
+                    contentResolver,
+                    Uri.parse(dirUri),
+                    mimeOf(safe),
+                    safe
+                ) ?: return false
+                pendingUri = uri
+
+                val os = contentResolver.openOutputStream(uri)
+                if (os == null) {
+                    contentResolver.delete(uri, null, null)
                     pendingUri = null
                     return false
                 }
@@ -263,6 +295,7 @@ class MainActivity : Activity() {
                     val i = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
                         addFlags(
                             Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
                                 Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
                         )
                     }
