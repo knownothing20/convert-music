@@ -3465,6 +3465,7 @@ const Zip = (() => {
     if (NATIVE) {
       dockTitle.textContent = "正在保存";
       let failed = 0;
+      const savedOk = [];
       for (let i = 0; i < doneList.length; i++) {
         const it = doneList[i];
         dockSub.textContent = `${i + 1}/${doneList.length} · ${it.outName}`;
@@ -3474,14 +3475,16 @@ const Zip = (() => {
             it.outName,
             targetDirFor(it)
           );
+          savedOk.push(it);
         } catch (e) {
           failed++;
           console.warn("保存失败：" + it.outName, e);
         }
       }
+      // 删除候选只包含保存成功的——失败的源文件必须留着，否则那首歌就丢了
       dockTitle.textContent = failed ? `已保存 ${doneList.length - failed} 个，失败 ${failed} 个` : "已保存";
       dockSub.textContent = failed ? "失败的可在列表里单独点「下载」重试" : `共 ${doneList.length} 个文件`;
-      askDeleteSources(doneList);
+      askDeleteSources(savedOk);
       return true;
     }
 
@@ -3680,6 +3683,7 @@ const Zip = (() => {
     };
     ok.onclick = () => { close(); if (onOk) onOk(); };
     cancel.onclick = close;
+    m.onclick = (e) => { if (e.target === m) close(); };   // 点遮罩等同「保留」
   }
 
   function canDeleteSources() {
@@ -3701,8 +3705,12 @@ const Zip = (() => {
         let ok = 0, fail = 0;
         for (const it of deletable) {
           try {
-            if (window.AndroidBridge.deleteSource(it.uri)) ok++;
-            else fail++;
+            if (window.AndroidBridge.deleteSource(it.uri)) {
+              ok++;
+              it.uri = "";   // 已删除，之后重复下载不再询问
+            } else {
+              fail++;
+            }
           } catch (e) { fail++; }
         }
         dockTitle.textContent = fail
