@@ -117,7 +117,9 @@ class DirManager(private val ctx: Context) {
                 val n = f.name ?: continue
                 if (!SUPPORTED_EXT.containsMatchIn(n.lowercase())) continue
 
-                val dest = File(scanDir, UUID.randomUUID().toString().take(8) + ".ncm")
+                // 后缀必须是系统 MIME 表认识的类型，否则 InternalStoragePathHandler 会返回 404。
+                // 这里只是临时文件名，内容和真实格式无关。
+                val dest = File(scanDir, UUID.randomUUID().toString().take(8) + ".mp3")
                 val ok = try {
                     ctx.contentResolver.openInputStream(f.uri)?.use { ins ->
                         dest.outputStream().use { outs -> ins.copyTo(outs) }
